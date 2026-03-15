@@ -38,6 +38,9 @@ pub struct Node {
     /// Ordered list of child node IDs.
     pub children: Vec<NodeId>,
 
+    /// Parent node ID, or `None` for root nodes.
+    pub parent: Option<NodeId>,
+
     /// Optional index into [`Scene::meshes`](crate::scene::Scene::meshes).
     pub mesh: Option<usize>,
 
@@ -63,6 +66,7 @@ impl Node {
             name: name.into(),
             transform: Transform::IDENTITY,
             children: Vec::new(),
+            parent:  None,
             mesh:   None,
             camera: None,
             light:  None,

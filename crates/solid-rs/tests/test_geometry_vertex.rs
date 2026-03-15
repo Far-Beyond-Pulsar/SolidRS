@@ -187,7 +187,7 @@ fn set_tangent_with_handedness() {
     let mut v = Vertex::new(Vec3::ZERO);
     v.tangent = Some(Vec4::new(1.0, 0.0, 0.0, 1.0));
     let t = v.tangent.unwrap();
-    assert_eq!(t.xyz(), Vec3::X);
+    assert_eq!(t.truncate(), Vec3::X);
     assert_eq!(t.w, 1.0); // right-handed
 }
 

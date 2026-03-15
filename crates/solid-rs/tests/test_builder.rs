@@ -146,14 +146,14 @@ fn builder_push_material_index() {
 #[test]
 fn builder_push_texture_index() {
     let mut b = SceneBuilder::new();
-    let idx   = b.push_texture(Texture::new(0));
+    let idx   = b.push_texture(Texture::new("Tex", 0));
     assert_eq!(idx, 0);
 }
 
 #[test]
 fn builder_push_image_index() {
     let mut b = SceneBuilder::new();
-    let idx   = b.push_image(Image::from_uri("test.png"));
+    let idx   = b.push_image(Image::from_uri("Img", "test.png"));
     assert_eq!(idx, 0);
 }
 
@@ -167,7 +167,7 @@ fn builder_push_camera_index() {
 #[test]
 fn builder_push_light_index() {
     let mut b = SceneBuilder::new();
-    let l     = Light::Directional(DirectionalLight::default());
+    let l     = Light::Directional(DirectionalLight { base: LightBase::new("Sun"), extensions: Extensions::new() });
     let idx   = b.push_light(l);
     assert_eq!(idx, 0);
 }
@@ -212,7 +212,7 @@ fn builder_attach_camera_to_node() {
 fn builder_attach_light_to_node() {
     let mut b     = SceneBuilder::new();
     let node_id   = b.add_root_node("N");
-    let light_idx = b.push_light(Light::Directional(DirectionalLight::default()));
+    let light_idx = b.push_light(Light::Directional(DirectionalLight { base: LightBase::new("Sun"), extensions: Extensions::new() }));
     b.attach_light(node_id, light_idx);
     let s = b.build();
     assert_eq!(s.node(node_id).unwrap().light, Some(light_idx));

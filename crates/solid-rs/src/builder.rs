@@ -73,7 +73,8 @@ impl SceneBuilder {
     /// Adds a child node under `parent` and returns the child's [`NodeId`].
     pub fn add_child_node(&mut self, parent: NodeId, name: impl Into<String>) -> NodeId {
         let id   = self.alloc_id();
-        let node = Node::new(id, name);
+        let mut node = Node::new(id, name);
+        node.parent = Some(parent);
         self.scene.nodes.push(node);
         if let Some(p) = self.scene.node_mut(parent) {
             p.children.push(id);

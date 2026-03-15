@@ -285,3 +285,15 @@ pub fn xyz_round_trip(scene: &Scene) -> Scene {
     XyzSaver.save(scene, &mut buf, &SaveOptions::default()).unwrap();
     XyzLoader.load(&mut std::io::Cursor::new(buf), &LoadOptions::default()).unwrap()
 }
+
+/// Returns a simple triangle mesh (not yet in a scene).
+pub fn make_triangle_mesh() -> Mesh {
+    let mut mesh = Mesh::new("Triangle");
+    mesh.vertices = vec![
+        Vertex::new(Vec3::new( 0.0,  1.0, 0.0)),
+        Vertex::new(Vec3::new(-1.0, -1.0, 0.0)),
+        Vertex::new(Vec3::new( 1.0, -1.0, 0.0)),
+    ];
+    mesh.primitives = vec![Primitive::triangles(vec![0, 1, 2], None)];
+    mesh
+}

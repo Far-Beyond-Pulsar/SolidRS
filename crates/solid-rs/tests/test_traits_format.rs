@@ -2,6 +2,9 @@ mod common;
 use common::*;
 use solid_rs::prelude::*;
 
+// pull the static into a convenient alias
+use common::MOCK_FMT as MOCK_FORMAT_INFO;
+
 // ── FormatInfo field access ───────────────────────────────────────────────────
 
 #[test]

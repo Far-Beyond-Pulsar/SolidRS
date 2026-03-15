@@ -52,7 +52,7 @@ fn load_options_can_be_customised() {
     assert!(opts.merge_vertices);
     assert!(opts.flip_uv_v);
     assert_eq!(opts.max_texture_size, Some(1024));
-    assert_eq!(opts.base_dir.as_deref(), Some("/tmp"));
+    assert_eq!(opts.base_dir.as_ref().and_then(|p| p.to_str()), Some("/tmp"));
 }
 
 #[test]
@@ -75,8 +75,8 @@ fn loader_format_info_correct() {
 
 #[test]
 fn loader_load_returns_scene() {
-    let data  = Cursor::new(b"");
-    let scene = MockLoader.load(data, &LoadOptions::default()).unwrap();
+    let mut data  = Cursor::new(b"");
+    let scene = MockLoader.load(&mut data, &LoadOptions::default()).unwrap();
     assert!(!scene.nodes.is_empty());
 }
 
@@ -104,15 +104,15 @@ fn loader_detect_magic_bytes() {
 
 #[test]
 fn fail_loader_returns_error() {
-    let data = Cursor::new(b"");
-    let r    = FailLoader.load(data, &LoadOptions::default());
+    let mut data = Cursor::new(b"");
+    let r    = FailLoader.load(&mut data, &LoadOptions::default());
     assert!(r.is_err());
 }
 
 #[test]
 fn fail_loader_error_is_parse() {
-    let data = Cursor::new(b"");
-    let e    = FailLoader.load(data, &LoadOptions::default()).unwrap_err();
+    let mut data = Cursor::new(b"");
+    let e    = FailLoader.load(&mut data, &LoadOptions::default()).unwrap_err();
     assert!(matches!(e, SolidError::Parse(_)));
 }
 
@@ -122,21 +122,21 @@ fn fail_loader_error_is_parse() {
 
 #[test]
 fn xyz_loader_empty_input_empty_mesh() {
-    let scene = XyzLoader.load(Cursor::new(b""), &LoadOptions::default()).unwrap();
+    let scene = XyzLoader.load(&mut Cursor::new(b""), &LoadOptions::default()).unwrap();
     assert_eq!(scene.meshes[0].vertex_count(), 0);
 }
 
 #[test]
 fn xyz_loader_one_vertex() {
     let data  = b"1.0 2.0 3.0\n";
-    let scene = XyzLoader.load(Cursor::new(data), &LoadOptions::default()).unwrap();
+    let scene = XyzLoader.load(&mut Cursor::new(data), &LoadOptions::default()).unwrap();
     assert_eq!(scene.meshes[0].vertex_count(), 1);
 }
 
 #[test]
 fn xyz_loader_three_vertices() {
     let data  = b"0 0 0\n1 0 0\n0 1 0\n";
-    let scene = XyzLoader.load(Cursor::new(data), &LoadOptions::default()).unwrap();
+    let scene = XyzLoader.load(&mut Cursor::new(data), &LoadOptions::default()).unwrap();
     assert_eq!(scene.meshes[0].vertex_count(), 3);
 }
 
@@ -144,13 +144,13 @@ fn xyz_loader_three_vertices() {
 fn xyz_loader_positions_correct() {
     use glam::Vec3;
     let data  = b"4.0 5.0 6.0\n";
-    let scene = XyzLoader.load(Cursor::new(data), &LoadOptions::default()).unwrap();
+    let scene = XyzLoader.load(&mut Cursor::new(data), &LoadOptions::default()).unwrap();
     assert_eq!(scene.meshes[0].vertices[0].position, Vec3::new(4.0, 5.0, 6.0));
 }
 
 #[test]
 fn xyz_loader_malformed_returns_error() {
     let data = b"not a number here\n";
-    let r    = XyzLoader.load(Cursor::new(data), &LoadOptions::default());
+    let r    = XyzLoader.load(&mut Cursor::new(data), &LoadOptions::default());
     assert!(r.is_err());
 }

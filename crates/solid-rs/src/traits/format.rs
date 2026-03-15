@@ -4,7 +4,7 @@
 ///
 /// Every [`Loader`](crate::traits::Loader) and [`Saver`](crate::traits::Saver)
 /// returns a reference to one of these from `format_info()`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct FormatInfo {
     /// Full human-readable name, e.g. `"Wavefront OBJ"`.
     pub name: &'static str,
