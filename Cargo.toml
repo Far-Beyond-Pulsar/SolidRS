@@ -1,0 +1,17 @@
+[workspace]
+members  = ["crates/solid-rs"]
+resolver = "2"
+
+[workspace.package]
+version       = "0.1.0"
+edition       = "2021"
+authors       = ["SolidRS Contributors"]
+license       = "MIT OR Apache-2.0"
+repository    = "https://github.com/your-org/solid-rs"
+homepage      = "https://github.com/your-org/solid-rs"
+documentation = "https://docs.rs/solid-rs"
+
+[workspace.dependencies]
+solid-rs  = { path = "crates/solid-rs", version = "0.1.0" }
+glam      = "0.27"
+thiserror = "2"

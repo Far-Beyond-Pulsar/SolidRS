@@ -1,0 +1,24 @@
+[package]
+name          = "solid-rs"
+description   = "A generic 3D model loading and saving library — core traits, scene primitives, and a format registry. Analogous to serde; format crates (solid-obj, solid-fbx, solid-gltf …) implement the Loader / Saver traits."
+keywords      = ["3d", "model", "mesh", "scene", "graphics"]
+categories    = ["graphics", "rendering", "game-development"]
+readme        = "../../README.md"
+
+version.workspace       = true
+edition.workspace       = true
+authors.workspace       = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+
+[dependencies]
+glam      = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+glam = { workspace = true }
+
+# ── feature flags ───────────────────────────────────────────────────────────
+# None in the core crate; format crates expose their own flags.
