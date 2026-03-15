@@ -945,6 +945,7 @@ impl<'d> Converter<'d> {
         let mut range: Option<f32> = None;
         let mut inner_angle = 0.0_f32;
         let mut outer_angle = std::f32::consts::FRAC_PI_4;
+        let mut area_size   = 1.0_f32;
 
         if let Some(props) = node.child("Properties70") {
             for p in props.children_named("P") {
@@ -971,6 +972,9 @@ impl<'d> Converter<'d> {
                     "OuterAngle" => {
                         outer_angle = prop_f32(p, 4).to_radians();
                     }
+                    "AreaSize" => {
+                        area_size = prop_f32(p, 4).max(0.0001);
+                    }
                     _ => {}
                 }
             }
@@ -986,6 +990,7 @@ impl<'d> Converter<'d> {
                 outer_cone_angle: outer_angle,
                 extensions: Extensions::new(),
             }),
+            3 => Light::Area(AreaLight { base, width: area_size, height: area_size, extensions: Extensions::new() }),
             _ => Light::Point(PointLight { base, range, extensions: Extensions::new() }),
         };
 

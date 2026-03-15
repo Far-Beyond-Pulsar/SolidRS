@@ -469,6 +469,29 @@ impl<'w> FbxWriter<'w> {
             self.line("}")?;
         }
 
+        // Tangents
+        let has_tangents = mesh.vertices.iter().any(|v| v.tangent.is_some());
+        if has_tangents {
+            let tangent_xyz: Vec<f64> = mesh.vertices.iter()
+                .flat_map(|v| {
+                    let t = v.tangent.unwrap_or(glam::Vec4::new(1.0, 0.0, 0.0, 1.0));
+                    [t.x as f64, t.y as f64, t.z as f64]
+                }).collect();
+            let tangent_w: Vec<f64> = mesh.vertices.iter()
+                .map(|v| v.tangent.map_or(1.0, |t| t.w as f64))
+                .collect();
+            self.line("LayerElementTangent: 0 {")?;
+            self.indent += 1;
+            self.line("Version: 101")?;
+            self.line("Name: \"\"")?;
+            self.line("MappingInformationType: \"ByPolygonVertex\"")?;
+            self.line("ReferenceInformationType: \"Direct\"")?;
+            self.write_f64_array("Tangents", &tangent_xyz)?;
+            self.write_f64_array("TangentW", &tangent_w)?;
+            self.indent -= 1;
+            self.line("}")?;
+        }
+
         // UVs
         let uvs: Vec<f64> = mesh.vertices.iter()
             .flat_map(|v| {
@@ -621,6 +644,17 @@ impl<'w> FbxWriter<'w> {
                     "P: \"FarPlane\", \"double\", \"Number\", \"\",{far}"
                 ))?;
             }
+        } else if let Projection::Orthographic(o) = &cam.projection {
+            self.line("P: \"CameraProjectionType\", \"enum\", \"\", \"\",1")?;
+            self.line(&format!(
+                "P: \"OrthoZoom\", \"double\", \"Number\", \"\",{}", o.x_mag
+            ))?;
+            self.line(&format!(
+                "P: \"NearPlane\", \"double\", \"Number\", \"\",{}", o.z_near
+            ))?;
+            self.line(&format!(
+                "P: \"FarPlane\", \"double\", \"Number\", \"\",{}", o.z_far
+            ))?;
         }
 
         self.indent -= 1;
@@ -642,7 +676,7 @@ impl<'w> FbxWriter<'w> {
             Light::Point(_)       => 0,
             Light::Directional(_) => 1,
             Light::Spot(_)        => 2,
-            Light::Area(_)        => 0, // no FBX area light; treat as point
+            Light::Area(_)        => 3,
         };
         self.line(&format!(
             "P: \"LightType\", \"enum\", \"\", \"\",{light_type}"
@@ -666,6 +700,13 @@ impl<'w> FbxWriter<'w> {
             self.line(&format!(
                 "P: \"OuterAngle\", \"Number\", \"\", \"A+\",{}",
                 s.outer_cone_angle.to_degrees()
+            ))?;
+        }
+
+        if let Light::Area(a) = light {
+            let area_size = a.width.max(a.height);
+            self.line(&format!(
+                "P: \"AreaSize\", \"double\", \"Number\", \"\",{area_size}"
             ))?;
         }
 
