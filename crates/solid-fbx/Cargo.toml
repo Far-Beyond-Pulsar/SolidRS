@@ -15,4 +15,5 @@ thiserror = { workspace = true }
 flate2    = { workspace = true }
 
 [dev-dependencies]
-glam = { workspace = true }
+solid-rs = { workspace = true }
+glam     = { workspace = true }
