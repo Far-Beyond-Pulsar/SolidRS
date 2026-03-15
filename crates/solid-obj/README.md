@@ -19,8 +19,13 @@
 | Negative / relative indices | ✅ | — |
 | N-gon fan triangulation | ✅ | — |
 | Per-group vertex deduplication | ✅ | — |
+| Smoothing groups (`s`) | ✅ | — |
 | Diffuse / emissive / alpha | ✅ | ✅ |
 | Texture maps (`map_Kd`, `map_bump`, …) | ✅ | ✅ |
+| PBR scalars (`Pr`, `Pm`) | ✅ | ✅ |
+| PBR texture maps (`map_Pr`, `map_Pm`, `map_Ke`) | ✅ | ✅ |
+| Normal map (`norm` alias) | ✅ | ✅ |
+| Alpha mode (`d` / `AlphaMode`) | ✅ | ✅ |
 | Embedded MTL in saved OBJ | — | ✅ |
 | Separate MTL writer | — | ✅ |
 | Skinning / animations | ❌ | ❌ |
@@ -130,8 +135,11 @@ Quads and n-gons are **fan-triangulated**: a polygon
 | `d` / `Tr` | `base_color_factor` alpha |
 | `Ke r g b` | `emissive_factor` |
 | `Ns` | `roughness_factor` (approximated: `sqrt(1 - Ns/1000)`) |
+| `Pr` | `roughness_factor` (explicit PBR, overrides `Ns`) |
+| `Pm` | `metallic_factor` |
 | `map_Kd` | `base_color_texture` |
-| `map_Ks` / `map_Pr` | `metallic_roughness_texture` |
+| `map_Ks` / `map_Pr` / `map_Pm` | `metallic_roughness_texture` |
+| `map_Ke` | `emissive_texture` |
 | `map_bump` / `bump` / `norm` | `normal_texture` |
 
 ### Multi-material meshes

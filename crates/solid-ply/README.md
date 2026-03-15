@@ -4,16 +4,21 @@ Stanford PLY format loader and saver for the [SolidRS](https://github.com/Far-Be
 
 ## Feature matrix
 
-| Feature                    | Status |
-|----------------------------|--------|
-| ASCII load                 | ✅     |
-| Binary little-endian load  | ✅     |
-| Binary big-endian load     | ✅     |
-| ASCII save                 | ✅     |
-| Binary little-endian save  | ✅     |
-| Point clouds               | ✅     |
-| N-gon fan triangulation    | ✅     |
-| Normals, UVs, vertex color | ✅     |
+| Feature                          | Status |
+|----------------------------------|--------|
+| ASCII load                       | ✅     |
+| Binary little-endian load        | ✅     |
+| Binary big-endian load           | ✅     |
+| ASCII save                       | ✅     |
+| Binary little-endian save        | ✅     |
+| Binary big-endian save           | ✅     |
+| Double-precision (`f64`) save    | ✅     |
+| Point cloud save (no faces)      | ✅     |
+| N-gon fan triangulation          | ✅     |
+| Normals, vertex color            | ✅     |
+| Tangents save                    | ✅     |
+| Multiple UV channels (0–7)       | ✅     |
+| All meshes in one file           | ✅     |
 
 ## Installation
 
@@ -75,19 +80,26 @@ ply
 format ascii 1.0            (or binary_little_endian / binary_big_endian)
 comment ...
 element vertex 1234
-property float x
+property float x            (or double when save_with_precision(…, true))
 property float y
 property float z
-property float nx
+property float nx           (if any vertex has a normal)
 property float ny
 property float nz
-property float s
+property float tx           (if any vertex has a tangent)
+property float ty
+property float tz
+property float tw
+property float s            (UV channel 0, if present)
 property float t
-property uchar red
+property float s1           (UV channel 1, if present)
+property float t1
+...                         (channels 2–7 follow the same pattern)
+property uchar red          (if any vertex has a colour)
 property uchar green
 property uchar blue
 property uchar alpha
-element face 456
+element face 456            (omitted for point clouds)
 property list uchar int vertex_indices
 end_header
 ```
@@ -111,8 +123,10 @@ end_header
 |-------------------------------------|---------------------------|
 | `x`, `y`, `z`                       | `position`                |
 | `nx`, `ny`, `nz`                    | `normal`                  |
+| `tx`, `ty`, `tz`, `tw`             | `tangent` (save only)     |
 | `s` / `u` / `texture_u`            | `uvs[0].x`                |
 | `t` / `v` / `texture_v`            | `uvs[0].y`                |
+| `s1` / `t1` … `s7` / `t7`         | `uvs[1..7]`               |
 | `red`/`r`, `green`/`g`, `blue`/`b` | `colors[0].xyz`           |
 | `alpha` / `a`                       | `colors[0].w`             |
 
@@ -129,5 +143,5 @@ crates/solid-ply/
     ├── lib.rs      — crate root, PLY_FORMAT static, public re-exports
     ├── header.rs   — header parser (PlyHeader, Element, Property, ScalarType)
     ├── loader.rs   — PlyLoader (ASCII + binary LE/BE)
-    └── saver.rs    — PlySaver  (ASCII default, binary LE via save_binary_le)
+    └── saver.rs    — PlySaver  (ASCII default; binary LE/BE; double precision)
 ```
