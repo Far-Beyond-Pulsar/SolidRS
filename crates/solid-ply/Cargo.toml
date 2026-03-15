@@ -11,3 +11,7 @@ homepage.workspace    = true
 [dependencies]
 solid-rs  = { workspace = true }
 glam      = { workspace = true }
+
+[dev-dependencies]
+solid-rs  = { workspace = true }
+glam      = { workspace = true }

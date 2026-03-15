@@ -11,3 +11,7 @@ repository   = "https://github.com/Far-Beyond-Pulsar/solid-rs"
 [dependencies]
 solid-rs = { workspace = true }
 glam     = { workspace = true }
+
+[dev-dependencies]
+solid-rs = { workspace = true }
+glam     = { workspace = true }
