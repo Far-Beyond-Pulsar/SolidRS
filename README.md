@@ -34,9 +34,12 @@ Add the core crate plus whichever format crates you need:
 
 ```toml
 [dependencies]
-solid-rs  = "0.1"
-solid-fbx = "0.1"
-solid-obj = "0.1"
+solid-rs   = "0.1"
+solid-fbx  = "0.1"   # Autodesk FBX
+solid-obj  = "0.1"   # Wavefront OBJ
+solid-gltf = "0.1"   # glTF 2.0 / GLB
+solid-stl  = "0.1"   # Stereolithography STL
+solid-ply  = "0.1"   # Stanford PLY
 ```
 
 ### Load a file
