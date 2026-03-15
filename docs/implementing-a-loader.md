@@ -43,15 +43,15 @@ static MY_FORMAT: FormatInfo = FormatInfo {
 
 ```rust
 use solid_rs::prelude::*;
-use solid_rs::traits::{LoadOptions, Loader};
-use std::io::{BufRead, BufReader, Read, Seek};
+use solid_rs::traits::{LoadOptions, Loader, ReadSeek};
+use std::io::{BufRead, BufReader, Read};
 
 pub struct MyFmtLoader;
 
 impl Loader for MyFmtLoader {
-    fn load<R: Read + Seek>(
+    fn load(
         &self,
-        reader: R,
+        reader: &mut dyn ReadSeek,
         options: &LoadOptions,
     ) -> Result<Scene> {
         let mut builder = SceneBuilder::new();
@@ -63,7 +63,7 @@ impl Loader for MyFmtLoader {
         &MY_FORMAT
     }
 
-    fn detect<R: Read>(&self, reader: &mut R) -> f32 {
+    fn detect(&self, reader: &mut dyn Read) -> f32 {
         let mut magic = [0u8; 4];
         if reader.read_exact(&mut magic).is_ok() && &magic == b"MYFT" {
             1.0
@@ -79,8 +79,8 @@ impl Loader for MyFmtLoader {
 ## 4. Parse and Populate the SceneBuilder
 
 ```rust
-fn parse_stream<R: Read>(
-    reader: R,
+fn parse_stream(
+    reader: &mut dyn Read,
     opts: &LoadOptions,
     b: &mut SceneBuilder,
 ) -> Result<()> {
