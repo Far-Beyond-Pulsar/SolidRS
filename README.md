@@ -214,14 +214,14 @@ Extensions: `.fbx` · MIME: `model/fbx`
 | Feature | Load | Save | Notes |
 |---|---|---|---|
 | **Encoding** | | | |
-| Binary FBX | ✅ | — | v6.1–v7.7; auto-detects 32-bit (< 7500) vs 64-bit offsets |
+| Binary FBX | ✅ | ✅ | v6.1–v7.7 load (32+64-bit offsets); v7.4 binary save via `FbxSaver::save_binary()` |
 | ASCII FBX | ✅ | ✅ | v7.4 format |
 | **Geometry** | | | |
 | Positions | ✅ | ✅ | |
 | Normals (`ByPolygonVertex` / `ByVertex`) | ✅ | ✅ | |
 | UV coordinates (channel 0) | ✅ | ✅ | V-axis flipped on load/save |
 | Vertex colours (`LayerElementColor`) | ✅ | ✅ | Direct + IndexToDirect |
-| Tangents | ❌ | ❌ | |
+| Tangents (`LayerElementTangent`) | ✅ | ✅ | xyz + w component |
 | N-gon triangulation (`PolygonVertexIndex`) | ✅ | ✅ | Fan method |
 | Per-polygon material (`LayerElementMaterial`) | ✅ | ✅ | `AllSame` + `ByPolygon` |
 | **Scene graph** | | | |
@@ -241,10 +241,10 @@ Extensions: `.fbx` · MIME: `model/fbx`
 | Point light | ✅ | ✅ | Colour, intensity, range |
 | Directional light | ✅ | ✅ | |
 | Spot light | ✅ | ✅ | Inner + outer cone angle |
-| Area light | ❌ | ❌ | |
+| Area light | ✅ | ✅ | `AreaSize` property |
 | **Cameras** | | | |
 | Perspective camera | ✅ | ✅ | FOV, near/far planes |
-| Orthographic camera | ❌ | ❌ | |
+| Orthographic camera | ✅ | ✅ | `OrthoZoom` / `CameraProjectionType` |
 | **Skinning** | | | |
 | Vertex weights (up to 4 influences) | ✅ | ✅ | Top-4 normalised |
 | Inverse bind-pose matrices | ✅ | ✅ | From `TransformLink` |
