@@ -88,6 +88,13 @@ struct RawLight {
     light:  Light,
 }
 
+struct RawSkin    { fbx_id: i64, name: String }
+struct RawCluster { fbx_id: i64, indexes: Vec<i32>, weights: Vec<f64>, transform_link: Mat4 }
+struct RawAnimStack  { fbx_id: i64, name: String }
+struct RawAnimLayer  { fbx_id: i64 }
+struct RawCurveNode  { fbx_id: i64 }
+struct RawCurve      { fbx_id: i64, times: Vec<f32>, values: Vec<f32> }
+
 // ── Converter ─────────────────────────────────────────────────────────────────
 
 struct Converter<'d> {
@@ -108,6 +115,19 @@ struct Converter<'d> {
     model_fbx: HashMap<i64, usize>,
     cam_fbx:   HashMap<i64, usize>,
     light_fbx: HashMap<i64, usize>,
+
+    skins:        Vec<RawSkin>,
+    clusters:     Vec<RawCluster>,
+    anim_stacks:  Vec<RawAnimStack>,
+    anim_layers:  Vec<RawAnimLayer>,
+    curve_nodes:  Vec<RawCurveNode>,
+    curves:       Vec<RawCurve>,
+    skin_fbx:       HashMap<i64, usize>,
+    cluster_fbx:    HashMap<i64, usize>,
+    anim_stack_fbx: HashMap<i64, usize>,
+    anim_layer_fbx: HashMap<i64, usize>,
+    curve_node_fbx: HashMap<i64, usize>,
+    curve_fbx:      HashMap<i64, usize>,
 
     // Pass-1b connections (src_id, dst_id[, property_name])
     oo_conns: Vec<(i64, i64)>,
@@ -130,6 +150,18 @@ impl<'d> Converter<'d> {
             model_fbx: HashMap::new(),
             cam_fbx:   HashMap::new(),
             light_fbx: HashMap::new(),
+            skins:        Vec::new(),
+            clusters:     Vec::new(),
+            anim_stacks:  Vec::new(),
+            anim_layers:  Vec::new(),
+            curve_nodes:  Vec::new(),
+            curves:       Vec::new(),
+            skin_fbx:       HashMap::new(),
+            cluster_fbx:    HashMap::new(),
+            anim_stack_fbx: HashMap::new(),
+            anim_layer_fbx: HashMap::new(),
+            curve_node_fbx: HashMap::new(),
+            curve_fbx:      HashMap::new(),
             oo_conns: Vec::new(),
             op_conns: Vec::new(),
         }
@@ -144,7 +176,12 @@ impl<'d> Converter<'d> {
                     "Material"      => self.extract_material(child),
                     "Texture"       => self.extract_texture(child),
                     "Model"         => self.extract_model(child),
-                    "NodeAttribute" => self.extract_node_attribute(child),
+                    "NodeAttribute"      => self.extract_node_attribute(child),
+                    "Deformer"           => self.extract_deformer(child),
+                    "AnimationStack"     => self.extract_anim_stack(child),
+                    "AnimationLayer"     => self.extract_anim_layer(child),
+                    "AnimationCurveNode" => self.extract_curve_node(child),
+                    "AnimationCurve"     => self.extract_curve(child),
                     _ => {}
                 }
             }
@@ -249,6 +286,70 @@ impl<'d> Converter<'d> {
         let geom_to_model: HashMap<i64, i64> = model_to_geom.iter()
             .map(|(&model_id, &geom_id)| (geom_id, model_id))
             .collect();
+
+        // ── Skin / cluster connection maps ────────────────────────────────────
+        let mut cluster_to_skin:  HashMap<i64, i64> = HashMap::new();
+        let mut cluster_to_joint: HashMap<i64, i64> = HashMap::new();
+        let mut skin_to_geom:     HashMap<i64, i64> = HashMap::new();
+
+        for &(src_id, dst_id) in &self.oo_conns {
+            if self.cluster_fbx.contains_key(&src_id) && self.skin_fbx.contains_key(&dst_id) {
+                cluster_to_skin.insert(src_id, dst_id);
+            } else if self.model_fbx.contains_key(&src_id) && self.cluster_fbx.contains_key(&dst_id) {
+                cluster_to_joint.insert(dst_id, src_id);
+            } else if self.skin_fbx.contains_key(&src_id) && self.geom_fbx.contains_key(&dst_id) {
+                skin_to_geom.insert(src_id, dst_id);
+            } else if self.geom_fbx.contains_key(&src_id) && self.skin_fbx.contains_key(&dst_id) {
+                skin_to_geom.insert(dst_id, src_id);
+            }
+        }
+
+        let mut skin_to_clusters: HashMap<i64, Vec<i64>> = HashMap::new();
+        for (&cluster_id, &skin_id) in &cluster_to_skin {
+            skin_to_clusters.entry(skin_id).or_default().push(cluster_id);
+        }
+
+        let geom_to_skin: HashMap<i64, i64> = skin_to_geom.iter()
+            .map(|(&sid, &gid)| (gid, sid)).collect();
+
+        // Apply skin weights to expanded vertices
+        for gi in 0..self.geoms.len() {
+            let geom_fbx_id = self.geoms[gi].fbx_id;
+            let skin_id = match geom_to_skin.get(&geom_fbx_id) { Some(&s) => s, None => continue };
+            let cluster_ids: Vec<i64> = skin_to_clusters.get(&skin_id).cloned().unwrap_or_default();
+            let num_uniq = self.geoms[gi].num_unique_verts;
+
+            let mut vert_influences: Vec<Vec<(usize, f32)>> = vec![vec![]; num_uniq];
+            for (ji, &cluster_id) in cluster_ids.iter().enumerate() {
+                let ci = match self.cluster_fbx.get(&cluster_id) { Some(&i) => i, None => continue };
+                let indexes = self.clusters[ci].indexes.clone();
+                let weights = self.clusters[ci].weights.clone();
+                for (&vi, &w) in indexes.iter().zip(weights.iter()) {
+                    let vi = vi as usize;
+                    if vi < num_uniq {
+                        vert_influences[vi].push((ji, w as f32));
+                    }
+                }
+            }
+
+            let orig_indices = self.geoms[gi].orig_vert_indices.clone();
+            for (vi_exp, vi_orig) in orig_indices.iter().enumerate() {
+                if *vi_orig >= vert_influences.len() { continue; }
+                let influences = vert_influences[*vi_orig].clone();
+                if influences.is_empty() { continue; }
+                let mut influences = influences;
+                influences.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                influences.truncate(4);
+                let sum: f32 = influences.iter().map(|x| x.1).sum();
+                let mut joints  = [0u16; 4];
+                let mut weights = [0.0f32; 4];
+                for (k, &(ji, w)) in influences.iter().enumerate() {
+                    joints[k]  = ji as u16;
+                    weights[k] = if sum > 0.0 { w / sum } else { w };
+                }
+                self.geoms[gi].vertices[vi_exp].skin_weights = Some(SkinWeights { joints, weights });
+            }
+        }
 
         let mut geom_scene_idxs: Vec<usize> = vec![usize::MAX; self.geoms.len()];
         for (ri, raw) in self.geoms.iter().enumerate() {
@@ -386,6 +487,138 @@ impl<'d> Converter<'d> {
             if !progress { break; }
         }
 
+        // ── Push skins ────────────────────────────────────────────────────────
+        for si in 0..self.skins.len() {
+            let skin_fbx_id = self.skins[si].fbx_id;
+            let geom_fbx_id = match skin_to_geom.get(&skin_fbx_id) { Some(&g) => g, None => continue };
+            let cluster_ids: Vec<i64> = skin_to_clusters.get(&skin_fbx_id).cloned().unwrap_or_default();
+
+            let mut skin = Skin::new(&self.skins[si].name);
+            for &cluster_id in &cluster_ids {
+                let joint_model_fbx_id = match cluster_to_joint.get(&cluster_id) { Some(&j) => j, None => continue };
+                let joint_node_id = match created_nodes.get(&joint_model_fbx_id) { Some(&nid) => nid, None => continue };
+                let ci = match self.cluster_fbx.get(&cluster_id) { Some(&i) => i, None => continue };
+                skin.joints.push(joint_node_id);
+                skin.inverse_bind_matrices.push(self.clusters[ci].transform_link.inverse());
+            }
+
+            let skin_scene_idx = b.push_skin(skin);
+
+            if let Some(&model_fbx_id) = geom_to_model.get(&geom_fbx_id) {
+                if let Some(&node_id) = created_nodes.get(&model_fbx_id) {
+                    b.attach_skin(node_id, skin_scene_idx);
+                }
+            }
+        }
+
+        // ── Push animations ───────────────────────────────────────────────────
+        let mut layer_to_stack:           HashMap<i64, i64>           = HashMap::new();
+        let mut curve_node_to_layer:      HashMap<i64, i64>           = HashMap::new();
+        let mut curve_node_to_model_prop: HashMap<i64, (i64, String)> = HashMap::new();
+        let mut curve_to_node_axis:       HashMap<i64, (i64, String)> = HashMap::new();
+
+        for &(src_id, dst_id) in &self.oo_conns {
+            if self.anim_layer_fbx.contains_key(&src_id) && self.anim_stack_fbx.contains_key(&dst_id) {
+                layer_to_stack.insert(src_id, dst_id);
+            } else if self.curve_node_fbx.contains_key(&src_id) && self.anim_layer_fbx.contains_key(&dst_id) {
+                curve_node_to_layer.insert(src_id, dst_id);
+            }
+        }
+        for (src_id, dst_id, prop) in &self.op_conns {
+            if self.curve_node_fbx.contains_key(src_id) && self.model_fbx.contains_key(dst_id) {
+                match prop.as_str() {
+                    "Lcl Translation" | "Lcl Rotation" | "Lcl Scaling" => {
+                        curve_node_to_model_prop.insert(*src_id, (*dst_id, prop.clone()));
+                    }
+                    _ => {}
+                }
+            } else if self.curve_fbx.contains_key(src_id) && self.curve_node_fbx.contains_key(dst_id) {
+                match prop.as_str() {
+                    "d|X" | "d|Y" | "d|Z" => {
+                        curve_to_node_axis.insert(*src_id, (*dst_id, prop.clone()));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let mut stack_to_curve_nodes: HashMap<i64, Vec<i64>> = HashMap::new();
+        for (&curve_node_id, &layer_id) in &curve_node_to_layer {
+            if let Some(&stack_id) = layer_to_stack.get(&layer_id) {
+                stack_to_curve_nodes.entry(stack_id).or_default().push(curve_node_id);
+            }
+        }
+
+        let mut node_axis_to_curve: HashMap<(i64, String), i64> = HashMap::new();
+        for (&curve_id, (node_id, axis)) in &curve_to_node_axis {
+            node_axis_to_curve.insert((*node_id, axis.clone()), curve_id);
+        }
+
+        for si in 0..self.anim_stacks.len() {
+            let stack_fbx_id = self.anim_stacks[si].fbx_id;
+            let mut animation = Animation::new(&self.anim_stacks[si].name);
+
+            let empty_vec: Vec<i64> = Vec::new();
+            let curve_node_ids: Vec<i64> = stack_to_curve_nodes.get(&stack_fbx_id).unwrap_or(&empty_vec).clone();
+
+            for curve_node_id in curve_node_ids {
+                let (model_fbx_id, prop_name) = match curve_node_to_model_prop.get(&curve_node_id) {
+                    Some(v) => (v.0, v.1.clone()),
+                    None => continue,
+                };
+                let node_id = match created_nodes.get(&model_fbx_id) { Some(&nid) => nid, None => continue };
+
+                let cx_id = node_axis_to_curve.get(&(curve_node_id, "d|X".to_string()));
+                let cy_id = node_axis_to_curve.get(&(curve_node_id, "d|Y".to_string()));
+                let cz_id = node_axis_to_curve.get(&(curve_node_id, "d|Z".to_string()));
+
+                let (tx, vx) = lookup_curve(&self.curve_fbx, &self.curves, cx_id);
+                let (ty, vy) = lookup_curve(&self.curve_fbx, &self.curves, cy_id);
+                let (tz, vz) = lookup_curve(&self.curve_fbx, &self.curves, cz_id);
+
+                if tx.is_empty() && ty.is_empty() && tz.is_empty() { continue; }
+
+                let (times, values) = merge_xyz_times(tx, vx, ty, vy, tz, vz);
+
+                let channel = match prop_name.as_str() {
+                    "Lcl Translation" => AnimationChannel {
+                        target: AnimationTarget::Translation(node_id),
+                        interpolation: Interpolation::Linear,
+                        times,
+                        values,
+                    },
+                    "Lcl Scaling" => AnimationChannel {
+                        target: AnimationTarget::Scale(node_id),
+                        interpolation: Interpolation::Linear,
+                        times,
+                        values,
+                    },
+                    "Lcl Rotation" => {
+                        let mut quat_vals = Vec::with_capacity(times.len() * 4);
+                        for i in 0..times.len() {
+                            let rx = values.get(i*3).copied().unwrap_or(0.0);
+                            let ry = values.get(i*3+1).copied().unwrap_or(0.0);
+                            let rz = values.get(i*3+2).copied().unwrap_or(0.0);
+                            let q = Quat::from_euler(EulerRot::XYZ, rx.to_radians(), ry.to_radians(), rz.to_radians());
+                            quat_vals.extend_from_slice(&[q.x, q.y, q.z, q.w]);
+                        }
+                        AnimationChannel {
+                            target: AnimationTarget::Rotation(node_id),
+                            interpolation: Interpolation::Linear,
+                            times,
+                            values: quat_vals,
+                        }
+                    },
+                    _ => continue,
+                };
+                animation.channels.push(channel);
+            }
+
+            if !animation.channels.is_empty() {
+                b.push_animation(animation);
+            }
+        }
+
         Ok(b.build())
     }
 
@@ -412,9 +645,10 @@ impl<'d> Converter<'d> {
 
         let (poly_mat_indices, mat_mapping_all_same) = extract_material_layer(node);
 
-        let mut vertices:     Vec<Vertex> = Vec::new();
-        let mut tri_indices:  Vec<u32>    = Vec::new();
-        let mut tri_poly_map: Vec<usize>  = Vec::new();
+        let mut vertices:          Vec<Vertex> = Vec::new();
+        let mut orig_vert_indices: Vec<usize>  = Vec::new();
+        let mut tri_indices:       Vec<u32>    = Vec::new();
+        let mut tri_poly_map:      Vec<usize>  = Vec::new();
         let mut poly_start  = 0usize;
         let mut flat_idx    = 0usize;
         let mut poly_idx    = 0usize;
@@ -459,6 +693,7 @@ impl<'d> Converter<'d> {
             if let Some(c) = color {
                 vtx.colors[0] = Some(c);
             }
+            orig_vert_indices.push(vert_idx);
             vertices.push(vtx);
             flat_idx += 1;
 
@@ -486,6 +721,8 @@ impl<'d> Converter<'d> {
             tri_poly_map,
             poly_mat_indices,
             mat_mapping_all_same,
+            orig_vert_indices,
+            num_unique_verts: verts.len() / 3,
         });
         Ok(())
     }
@@ -723,6 +960,78 @@ impl<'d> Converter<'d> {
         self.light_fbx.insert(id, idx);
         self.lights.push(RawLight { fbx_id: id, light });
     }
+
+    fn extract_deformer(&mut self, node: &FbxNode) {
+        let id       = node.id().unwrap_or(0);
+        let name     = fbx_object_name(node);
+        let sub_type = node.object_class().unwrap_or("");
+
+        match sub_type {
+            "Skin" => {
+                let idx = self.skins.len();
+                self.skin_fbx.insert(id, idx);
+                self.skins.push(RawSkin { fbx_id: id, name });
+            }
+            "Cluster" => {
+                let indexes: Vec<i32> = node.child("Indexes")
+                    .and_then(|n| n.as_i32_slice()).map(|s| s.to_vec()).unwrap_or_default();
+                let weights: Vec<f64> = node.child("Weights")
+                    .and_then(|n| n.as_f64_slice()).map(|s| s.to_vec()).unwrap_or_default();
+                let transform_link: Mat4 = node.child("TransformLink")
+                    .and_then(|n| n.as_f64_slice())
+                    .map(mat4_from_cols)
+                    .unwrap_or(Mat4::IDENTITY);
+
+                let idx = self.clusters.len();
+                self.cluster_fbx.insert(id, idx);
+                self.clusters.push(RawCluster { fbx_id: id, indexes, weights, transform_link });
+            }
+            _ => {}
+        }
+    }
+
+    fn extract_anim_stack(&mut self, node: &FbxNode) {
+        let id   = node.id().unwrap_or(0);
+        let name = fbx_object_name(node);
+        let idx  = self.anim_stacks.len();
+        self.anim_stack_fbx.insert(id, idx);
+        self.anim_stacks.push(RawAnimStack { fbx_id: id, name });
+    }
+
+    fn extract_anim_layer(&mut self, node: &FbxNode) {
+        let id  = node.id().unwrap_or(0);
+        let idx = self.anim_layers.len();
+        self.anim_layer_fbx.insert(id, idx);
+        self.anim_layers.push(RawAnimLayer { fbx_id: id });
+    }
+
+    fn extract_curve_node(&mut self, node: &FbxNode) {
+        let id  = node.id().unwrap_or(0);
+        let idx = self.curve_nodes.len();
+        self.curve_node_fbx.insert(id, idx);
+        self.curve_nodes.push(RawCurveNode { fbx_id: id });
+    }
+
+    fn extract_curve(&mut self, node: &FbxNode) {
+        const FBX_TIME_UNIT: f64 = 46186158000.0;
+        let id = node.id().unwrap_or(0);
+
+        let times: Vec<f32> = node.child("KeyTime")
+            .and_then(|n| n.properties.first())
+            .and_then(|p| p.as_i64_slice())
+            .map(|s| s.iter().map(|&t| (t as f64 / FBX_TIME_UNIT) as f32).collect())
+            .unwrap_or_default();
+
+        let values: Vec<f32> = node.child("KeyValueFloat")
+            .and_then(|n| n.properties.first())
+            .and_then(|p| p.as_f32_slice())
+            .map(|s| s.to_vec())
+            .unwrap_or_default();
+
+        let idx = self.curves.len();
+        self.curve_fbx.insert(id, idx);
+        self.curves.push(RawCurve { fbx_id: id, times, values });
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -841,4 +1150,54 @@ impl RefMode {
             _ => RefMode::Direct,
         }
     }
+}
+
+fn mat4_from_cols(s: &[f64]) -> Mat4 {
+    if s.len() < 16 { return Mat4::IDENTITY; }
+    Mat4::from_cols_array(&[
+        s[0]  as f32, s[1]  as f32, s[2]  as f32, s[3]  as f32,
+        s[4]  as f32, s[5]  as f32, s[6]  as f32, s[7]  as f32,
+        s[8]  as f32, s[9]  as f32, s[10] as f32, s[11] as f32,
+        s[12] as f32, s[13] as f32, s[14] as f32, s[15] as f32,
+    ])
+}
+
+fn lookup_curve<'a>(
+    curve_fbx: &HashMap<i64, usize>,
+    curves: &'a [RawCurve],
+    id: Option<&i64>,
+) -> (&'a [f32], &'a [f32]) {
+    id.and_then(|id| curve_fbx.get(id))
+        .map(|&idx| (curves[idx].times.as_slice(), curves[idx].values.as_slice()))
+        .unwrap_or((&[], &[]))
+}
+
+fn merge_xyz_times(
+    tx: &[f32], vx: &[f32],
+    ty: &[f32], vy: &[f32],
+    tz: &[f32], vz: &[f32],
+) -> (Vec<f32>, Vec<f32>) {
+    let mut all_times: Vec<f32> = tx.iter().chain(ty).chain(tz).cloned().collect();
+    all_times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    all_times.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+
+    let interp = |times: &[f32], vals: &[f32], t: f32| -> f32 {
+        if times.is_empty() { return 0.0; }
+        if t <= times[0] { return vals[0]; }
+        if t >= *times.last().unwrap() { return *vals.last().unwrap(); }
+        let i = times.partition_point(|&x| x <= t).saturating_sub(1);
+        let i = i.min(times.len() - 2);
+        let t0 = times[i]; let t1 = times[i + 1];
+        let v0 = vals[i];  let v1 = vals[i + 1];
+        let alpha = if (t1 - t0).abs() < 1e-10 { 0.0 } else { (t - t0) / (t1 - t0) };
+        v0 + alpha * (v1 - v0)
+    };
+
+    let mut values = Vec::with_capacity(all_times.len() * 3);
+    for &t in &all_times {
+        values.push(interp(tx, vx, t));
+        values.push(interp(ty, vy, t));
+        values.push(interp(tz, vz, t));
+    }
+    (all_times, values)
 }

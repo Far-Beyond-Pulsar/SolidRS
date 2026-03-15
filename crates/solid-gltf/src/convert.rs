@@ -691,11 +691,6 @@ pub fn scene_to_gltf(
         });
     }
 
-    // Buffer 0: the binary blob
-    if !bin.is_empty() {
-        gltf.buffers.push(GltfBuffer { byte_length: bin.len(), uri: None, name: None });
-    }
-
     // --- Cameras ---
     for cam in &scene.cameras {
         let (type_, perspective, orthographic) = match &cam.projection {
@@ -767,16 +762,162 @@ pub fn scene_to_gltf(
             None
         };
         let scale = if t.scale != Vec3::ONE { Some(t.scale.to_array()) } else { None };
+        let node_extensions = node.light.map(|li| {
+            serde_json::json!({ "KHR_lights_punctual": { "light": li } })
+        });
         gltf.nodes.push(GltfNode {
             name: if node.name.is_empty() { None } else { Some(node.name.clone()) },
             children,
-            mesh:   node.mesh,
-            camera: node.camera,
+            mesh:       node.mesh,
+            camera:     node.camera,
+            skin:       node.skin,
             translation,
             rotation,
             scale,
+            extensions: node_extensions,
             ..Default::default()
         });
+    }
+
+    // --- Skins ---
+    for skin in &scene.skins {
+        let ibm_acc = if !skin.inverse_bind_matrices.is_empty() {
+            let off = bin.len();
+            for mat in &skin.inverse_bind_matrices {
+                for &f in &mat.to_cols_array() {
+                    bin.extend_from_slice(&f.to_le_bytes());
+                }
+            }
+            let n_joints = skin.inverse_bind_matrices.len();
+            let bv  = push_bv(&mut gltf, 0, off, n_joints * 64, None, None);
+            let acc = push_acc(&mut gltf, bv, 5126, n_joints, "MAT4", 0);
+            Some(acc)
+        } else {
+            None
+        };
+        let skeleton = skin.skeleton_root.and_then(|nid| gltf_node_map.get(&nid).copied());
+        let joints: Vec<usize> = skin
+            .joints
+            .iter()
+            .filter_map(|&nid| gltf_node_map.get(&nid).copied())
+            .collect();
+        gltf.skins.push(GltfSkin {
+            name: if skin.name.is_empty() { None } else { Some(skin.name.clone()) },
+            inverse_bind_matrices: ibm_acc,
+            skeleton,
+            joints,
+        });
+    }
+
+    // --- Animations ---
+    for anim in &scene.animations {
+        let mut ganim = GltfAnimation {
+            name: if anim.name.is_empty() { None } else { Some(anim.name.clone()) },
+            ..Default::default()
+        };
+        for ch in &anim.channels {
+            // Times accessor (SCALAR FLOAT)
+            let times_off = bin.len();
+            for &t in &ch.times {
+                bin.extend_from_slice(&t.to_le_bytes());
+            }
+            let times_bv  = push_bv(&mut gltf, 0, times_off, ch.times.len() * 4, None, None);
+            let times_acc = push_acc(&mut gltf, times_bv, 5126, ch.times.len(), "SCALAR", 0);
+            if !ch.times.is_empty() {
+                let acc = gltf.accessors.last_mut().unwrap();
+                acc.min = vec![*ch.times.first().unwrap() as f64];
+                acc.max = vec![*ch.times.last().unwrap() as f64];
+            }
+
+            // Values accessor
+            let output_type = match &ch.target {
+                AnimationTarget::Translation(_) | AnimationTarget::Scale(_) => "VEC3",
+                AnimationTarget::Rotation(_) => "VEC4",
+                AnimationTarget::MorphWeight { .. } => "SCALAR",
+            };
+            let n_comps: usize = match output_type {
+                "VEC3" => 3, "VEC4" => 4, _ => 1,
+            };
+            let n_keyframes = if n_comps > 0 { ch.values.len() / n_comps } else { 0 };
+
+            let vals_off = bin.len();
+            for &v in &ch.values {
+                bin.extend_from_slice(&v.to_le_bytes());
+            }
+            let vals_bv  = push_bv(&mut gltf, 0, vals_off, ch.values.len() * 4, None, None);
+            let vals_acc = push_acc(&mut gltf, vals_bv, 5126, n_keyframes, output_type, 0);
+
+            let interp = match ch.interpolation {
+                Interpolation::Linear      => "LINEAR",
+                Interpolation::Step        => "STEP",
+                Interpolation::CubicSpline => "CUBICSPLINE",
+            };
+
+            let sampler_idx = ganim.samplers.len();
+            ganim.samplers.push(GltfAnimationSampler {
+                input:         times_acc,
+                interpolation: Some(interp.into()),
+                output:        vals_acc,
+            });
+
+            let (target_node, path) = match &ch.target {
+                AnimationTarget::Translation(nid) => (gltf_node_map.get(nid).copied(), "translation"),
+                AnimationTarget::Rotation(nid)    => (gltf_node_map.get(nid).copied(), "rotation"),
+                AnimationTarget::Scale(nid)       => (gltf_node_map.get(nid).copied(), "scale"),
+                AnimationTarget::MorphWeight { node_id, .. } => (gltf_node_map.get(node_id).copied(), "weights"),
+            };
+            ganim.channels.push(GltfAnimationChannel {
+                sampler: sampler_idx,
+                target:  GltfAnimationTarget { node: target_node, path: path.into() },
+            });
+        }
+        gltf.animations.push(ganim);
+    }
+
+    // --- KHR_lights_punctual (save) ---
+    if !scene.lights.is_empty() {
+        gltf.extensions_used.push("KHR_lights_punctual".into());
+
+        let lights_json: Vec<serde_json::Value> = scene.lights.iter().map(|light| {
+            let color     = light.color();
+            let intensity = light.intensity();
+            let name      = light.name().to_string();
+            let mut obj = serde_json::json!({
+                "name":      name,
+                "color":     [color.x, color.y, color.z],
+                "intensity": intensity,
+            });
+            match light {
+                Light::Directional(_) => {
+                    obj["type"] = serde_json::Value::String("directional".into());
+                }
+                Light::Point(l) => {
+                    obj["type"] = serde_json::Value::String("point".into());
+                    if let Some(r) = l.range {
+                        obj["range"] = serde_json::Value::from(r);
+                    }
+                }
+                Light::Spot(l) => {
+                    obj["type"] = serde_json::Value::String("spot".into());
+                    if let Some(r) = l.range {
+                        obj["range"] = serde_json::Value::from(r);
+                    }
+                    obj["spot"] = serde_json::json!({
+                        "innerConeAngle": l.inner_cone_angle,
+                        "outerConeAngle": l.outer_cone_angle,
+                    });
+                }
+                Light::Area(_) => {
+                    // No standard glTF equivalent; save as point light.
+                    obj["type"] = serde_json::Value::String("point".into());
+                }
+            }
+            obj
+        }).collect();
+
+        gltf.extensions = Some(serde_json::json!({
+            "KHR_lights_punctual": { "lights": lights_json }
+        }));
     }
 
     // --- Scene ---
@@ -790,6 +931,11 @@ pub fn scene_to_gltf(
         nodes: root_gltf_indices,
     });
     gltf.scene = Some(0);
+
+    // Buffer 0: the binary blob (pushed last so byte_length is final)
+    if !bin.is_empty() {
+        gltf.buffers.push(GltfBuffer { byte_length: bin.len(), uri: None, name: None });
+    }
 
     Ok((gltf, bin))
 }

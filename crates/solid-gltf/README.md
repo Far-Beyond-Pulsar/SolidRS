@@ -13,14 +13,15 @@ glTF 2.0 / GLB loader and saver for the [SolidRS](https://github.com/Far-Beyond-
 | Meshes (positions, normals, tangents) | ✅ | ✅ |
 | UV channels (TEXCOORD_0–7) | ✅ | ✅ (ch 0) |
 | Vertex colours (COLOR_0) | ✅ | ✅ |
-| Skinning (JOINTS_0 / WEIGHTS_0) | ✅ | — |
+| Skinning (JOINTS_0 / WEIGHTS_0) | ✅ | ✅ |
 | PBR metallic-roughness materials | ✅ | ✅ |
 | Textures & images (URI / embedded) | ✅ | ✅ |
 | Cameras (perspective & orthographic) | ✅ | ✅ |
 | Scene hierarchy (nodes, TRS, matrix) | ✅ | ✅ |
-| Animations | — | — |
-| Skins / skeletons | — | — |
-| Extensions (KHR_*) | — | — |
+| Animations | ✅ | ✅ |
+| Skins / skeletons | ✅ | ✅ |
+| KHR_lights_punctual | ✅ | ✅ |
+| Sparse accessors | ✅ | — |
 
 ## Installation
 

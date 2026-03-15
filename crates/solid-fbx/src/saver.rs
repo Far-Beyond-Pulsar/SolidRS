@@ -5,14 +5,42 @@
 
 use std::io::Write;
 
-use glam::{EulerRot, Vec3};
+use glam::{EulerRot, Mat4, Quat, Vec3};
 
 use solid_rs::prelude::*;
-use solid_rs::scene::{AlphaMode, Camera, Light, Scene};
+use solid_rs::scene::{AlphaMode, Animation, AnimationTarget, Camera, Light, Scene};
 use solid_rs::scene::camera::Projection;
 use solid_rs::{Result, SolidError};
 
 use crate::FBX_FORMAT;
+
+struct SkinEntry {
+    skin_id:   i64,
+    geom_id:   i64,
+    node_idx:  usize,
+    skin_idx:  usize,
+    clusters:  Vec<ClusterEntry>,
+}
+
+struct ClusterEntry {
+    cluster_id:     i64,
+    joint_node_idx: usize,
+}
+
+struct AnimEntry {
+    stack_id: i64,
+    layer_id: i64,
+    channels: Vec<ChannelEntry>,
+}
+
+struct ChannelEntry {
+    curve_node_id: i64,
+    cx_id:         i64,
+    cy_id:         i64,
+    cz_id:         i64,
+    chan_idx:       usize,
+    anim_idx:       usize,
+}
 
 /// Saves a `Scene` as ASCII FBX 7.4.
 pub struct FbxSaver;
@@ -57,10 +85,48 @@ impl<'w> FbxWriter<'w> {
         let cam_ids:   Vec<i64> = (0..scene.cameras.len()).map(|_| next_id(&mut id_counter)).collect();
         let light_ids: Vec<i64> = (0..scene.lights.len()).map(|_| next_id(&mut id_counter)).collect();
 
+        // ── Skin entries ──────────────────────────────────────────────────────
+        let mut skin_entries: Vec<SkinEntry> = Vec::new();
+        for (ni, node) in scene.nodes.iter().enumerate() {
+            if let (Some(skin_idx), Some(mesh_idx)) = (node.skin, node.mesh) {
+                if skin_idx >= scene.skins.len() || mesh_idx >= scene.meshes.len() { continue; }
+                let skin = &scene.skins[skin_idx];
+                let skin_id = next_id(&mut id_counter);
+                let geom_id = mesh_ids[mesh_idx];
+                let mut clusters = Vec::new();
+                for joint_node_id in &skin.joints {
+                    if let Some(jni) = scene.nodes.iter().position(|n| n.id == *joint_node_id) {
+                        let cluster_id = next_id(&mut id_counter);
+                        clusters.push(ClusterEntry { cluster_id, joint_node_idx: jni });
+                    }
+                }
+                skin_entries.push(SkinEntry { skin_id, geom_id, node_idx: ni, skin_idx, clusters });
+            }
+        }
+
+        // ── Animation entries ─────────────────────────────────────────────────
+        let mut anim_entries: Vec<AnimEntry> = Vec::new();
+        for (ai, anim) in scene.animations.iter().enumerate() {
+            let stack_id = next_id(&mut id_counter);
+            let layer_id = next_id(&mut id_counter);
+            let mut channels = Vec::new();
+            for (ci, _chan) in anim.channels.iter().enumerate() {
+                let curve_node_id = next_id(&mut id_counter);
+                let cx_id = next_id(&mut id_counter);
+                let cy_id = next_id(&mut id_counter);
+                let cz_id = next_id(&mut id_counter);
+                channels.push(ChannelEntry { curve_node_id, cx_id, cy_id, cz_id, chan_idx: ci, anim_idx: ai });
+            }
+            anim_entries.push(AnimEntry { stack_id, layer_id, channels });
+        }
+
         // ── Definitions ──────────────────────────────────────────────────────
+        let skin_obj_count: usize = skin_entries.iter().map(|e| 1 + e.clusters.len()).sum();
+        let anim_obj_count: usize = anim_entries.iter().map(|e| 2 + e.channels.len() * 4).sum();
         let total = scene.meshes.len() + scene.materials.len()
                   + scene.textures.len() + scene.nodes.len()
-                  + scene.cameras.len() + scene.lights.len();
+                  + scene.cameras.len() + scene.lights.len()
+                  + skin_obj_count + anim_obj_count;
         self.line("Definitions:  {")?;
         self.indent += 1;
         self.line("Version: 100")?;
