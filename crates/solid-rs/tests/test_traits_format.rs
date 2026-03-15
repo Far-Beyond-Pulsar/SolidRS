@@ -123,7 +123,7 @@ fn format_info_no_extensions() {
 
 #[test]
 fn format_info_copy() {
-    let info  = *MOCK_FORMAT_INFO;
+    let info  = MOCK_FORMAT_INFO;
     let info2 = info;
     assert_eq!(info.id, info2.id);
 }
