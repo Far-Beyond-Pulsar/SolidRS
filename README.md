@@ -121,9 +121,10 @@ cargo run -p fbx-to-obj -- input.fbx output.obj
 │  SceneBuilder   LoadOptions   SaveOptions          │
 └──────────────────────┬─────────────────────────────┘
                        │  implements
-         ┌─────────────┼──────────────┐
-         ▼             ▼              ▼
-     solid-fbx     solid-obj      solid-gltf …
+       ┌───────────────┼───────────────────┐
+       ▼               ▼                   ▼
+   solid-fbx       solid-obj          solid-gltf
+   solid-stl       solid-ply          solid-usd …
 ```
 
 ### Scene IR
@@ -179,9 +180,24 @@ cargo build --workspace
 # Run the full test suite (~350 tests)
 cargo test --workspace
 
-# Run the converter example
-cargo run -p fbx-to-obj
+# Run the FBX → OBJ converter example
+cargo run -p fbx-to-obj -- input.fbx output.obj
 ```
+
+### Format support matrix
+
+| Format | Load | Save | Notes |
+|---|---|---|---|
+| FBX (binary) | ✅ | — | 6.1–7.4, 32 + 64-bit offsets |
+| FBX (ASCII) | ✅ | ✅ | 7.4; cameras, lights, vertex colours |
+| OBJ / MTL | ✅ | ✅ | N-gon fan triangulation; separate MTL save |
+| glTF 2.0 JSON | ✅ | ✅ | Embedded base64 buffers; skinning |
+| GLB | ✅ | ✅ | Binary glTF; `GltfSaver::save_glb()` |
+| STL binary | ✅ | ✅ | Vertex deduplication on load |
+| STL ASCII | ✅ | ✅ | `StlSaver::save_ascii()` helper |
+| PLY ASCII | ✅ | ✅ | N-gon fan triangulation; point clouds |
+| PLY binary LE | ✅ | ✅ | `PlySaver::save_binary_le()` helper |
+| PLY binary BE | ✅ | — | Read-only |
 
 ---
 
