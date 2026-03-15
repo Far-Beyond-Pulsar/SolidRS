@@ -22,6 +22,7 @@ glTF 2.0 / GLB loader and saver for the [SolidRS](https://github.com/Far-Beyond-
 | Skins / skeletons | ✅ | ✅ |
 | KHR_lights_punctual | ✅ | ✅ |
 | Sparse accessors | ✅ | — |
+| Morph targets (blend shapes) | ✅ | ✅ |
 
 ## Installation
 

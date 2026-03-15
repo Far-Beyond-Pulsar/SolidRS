@@ -8,7 +8,7 @@ use solid_rs::geometry::{Primitive, SkinWeights, Transform, Vertex};
 use solid_rs::scene::{
     AlphaMode, Animation, AnimationChannel, AnimationTarget, Camera,
     DirectionalLight, Image, ImageSource, Interpolation, Light, LightBase,
-    Material, Mesh, NodeId, OrthographicCamera, PerspectiveCamera,
+    Material, Mesh, MorphTarget, NodeId, OrthographicCamera, PerspectiveCamera,
     PointLight, Projection, Skin, SpotLight, Texture, TextureRef,
 };
 use solid_rs::{Result, SolidError};
@@ -220,6 +220,45 @@ pub fn gltf_to_scene(
             let solid_prim = Primitive::triangles(offset_indices, prim.material);
             mesh.primitives.push(solid_prim);
         }
+
+        // --- Morph targets (second pass over primitives, concatenating per-prim deltas) ---
+        let n_targets = gmesh.primitives.iter().map(|p| p.targets.len()).max().unwrap_or(0);
+        if n_targets > 0 {
+            let mut morph_targets: Vec<MorphTarget> = (0..n_targets)
+                .map(|i| MorphTarget {
+                    name: format!("target_{i}"),
+                    ..Default::default()
+                })
+                .collect();
+            for prim in &gmesh.primitives {
+                for (ti, tgt_map) in prim.targets.iter().enumerate() {
+                    if ti >= morph_targets.len() {
+                        break;
+                    }
+                    if let Some(&pos_idx) = tgt_map.get("POSITION") {
+                        let flat = buffer::read_f32(root, &buffers, pos_idx)?;
+                        morph_targets[ti].position_deltas.extend(
+                            flat.chunks_exact(3).map(|c| Vec3::new(c[0], c[1], c[2])),
+                        );
+                    }
+                    if let Some(&nor_idx) = tgt_map.get("NORMAL") {
+                        let flat = buffer::read_f32(root, &buffers, nor_idx)?;
+                        morph_targets[ti].normal_deltas.extend(
+                            flat.chunks_exact(3).map(|c| Vec3::new(c[0], c[1], c[2])),
+                        );
+                    }
+                    if let Some(&tan_idx) = tgt_map.get("TANGENT") {
+                        let flat = buffer::read_f32(root, &buffers, tan_idx)?;
+                        morph_targets[ti].tangent_deltas.extend(
+                            flat.chunks_exact(3).map(|c| Vec3::new(c[0], c[1], c[2])),
+                        );
+                    }
+                }
+            }
+            mesh.morph_targets = morph_targets;
+            mesh.morph_weights  = gmesh.weights.clone();
+        }
+
         b.push_mesh(mesh);
     }
 
@@ -667,6 +706,81 @@ pub fn scene_to_gltf(
                 attributes.insert("WEIGHTS_0".into(), acc);
             }
 
+            // Morph targets — write delta accessors for each target, once per primitive
+            // (mirrors how POSITION/NORMAL are written: all mesh vertices per primitive).
+            let mut targets_vec: Vec<std::collections::HashMap<String, usize>> = Vec::new();
+            for target in &mesh.morph_targets {
+                let mut tgt_map: std::collections::HashMap<String, usize> =
+                    std::collections::HashMap::new();
+
+                // POSITION deltas (required accessor; spec mandates min/max)
+                if !target.position_deltas.is_empty() {
+                    let off   = bin.len();
+                    let count = n.min(target.position_deltas.len());
+                    for d in target.position_deltas.iter().take(count) {
+                        bin.extend_from_slice(&d.x.to_le_bytes());
+                        bin.extend_from_slice(&d.y.to_le_bytes());
+                        bin.extend_from_slice(&d.z.to_le_bytes());
+                    }
+                    for _ in count..n {
+                        bin.extend_from_slice(&[0u8; 12]);
+                    }
+                    let bv    = push_bv(&mut gltf, 0, off, n * 12, None, None);
+                    let acc_i = push_acc(&mut gltf, bv, 5126, n, "VEC3", 0);
+                    {
+                        let acc = gltf.accessors.last_mut().unwrap();
+                        let (mut mn, mut mx) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+                        for d in target.position_deltas.iter().take(count) {
+                            mn = mn.min(*d);
+                            mx = mx.max(*d);
+                        }
+                        if count == 0 {
+                            mn = Vec3::ZERO;
+                            mx = Vec3::ZERO;
+                        }
+                        acc.min = vec![mn.x as f64, mn.y as f64, mn.z as f64];
+                        acc.max = vec![mx.x as f64, mx.y as f64, mx.z as f64];
+                    }
+                    tgt_map.insert("POSITION".into(), acc_i);
+                }
+
+                // NORMAL deltas
+                if !target.normal_deltas.is_empty() {
+                    let off   = bin.len();
+                    let count = n.min(target.normal_deltas.len());
+                    for d in target.normal_deltas.iter().take(count) {
+                        bin.extend_from_slice(&d.x.to_le_bytes());
+                        bin.extend_from_slice(&d.y.to_le_bytes());
+                        bin.extend_from_slice(&d.z.to_le_bytes());
+                    }
+                    for _ in count..n {
+                        bin.extend_from_slice(&[0u8; 12]);
+                    }
+                    let bv    = push_bv(&mut gltf, 0, off, n * 12, None, None);
+                    let acc_i = push_acc(&mut gltf, bv, 5126, n, "VEC3", 0);
+                    tgt_map.insert("NORMAL".into(), acc_i);
+                }
+
+                // TANGENT deltas (xyz only — morph tangents have no w)
+                if !target.tangent_deltas.is_empty() {
+                    let off   = bin.len();
+                    let count = n.min(target.tangent_deltas.len());
+                    for d in target.tangent_deltas.iter().take(count) {
+                        bin.extend_from_slice(&d.x.to_le_bytes());
+                        bin.extend_from_slice(&d.y.to_le_bytes());
+                        bin.extend_from_slice(&d.z.to_le_bytes());
+                    }
+                    for _ in count..n {
+                        bin.extend_from_slice(&[0u8; 12]);
+                    }
+                    let bv    = push_bv(&mut gltf, 0, off, n * 12, None, None);
+                    let acc_i = push_acc(&mut gltf, bv, 5126, n, "VEC3", 0);
+                    tgt_map.insert("TANGENT".into(), acc_i);
+                }
+
+                targets_vec.push(tgt_map);
+            }
+
             // Indices (u32)
             let idx_off = bin.len();
             for &i in &prim.indices {
@@ -680,14 +794,14 @@ pub fn scene_to_gltf(
                 indices: Some(idx_acc),
                 material: prim.material_index,
                 mode: None,
-                targets: vec![],
+                targets: targets_vec,
             });
         }
 
         gltf.meshes.push(GltfMesh {
             name: if mesh.name.is_empty() { None } else { Some(mesh.name.clone()) },
             primitives: gprims,
-            weights: vec![],
+            weights: mesh.morph_weights.clone(),
         });
     }
 

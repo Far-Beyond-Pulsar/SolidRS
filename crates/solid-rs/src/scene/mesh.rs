@@ -56,6 +56,9 @@ pub struct Mesh {
     /// Blend shapes / shape keys for morph-target animation.
     pub morph_targets: Vec<MorphTarget>,
 
+    /// Initial blend weights, one per morph target (same length as `morph_targets`, or empty).
+    pub morph_weights: Vec<f32>,
+
     /// Cached axis-aligned bounding box. `None` until [`compute_bounds`] is
     /// called or a loader computes it from the source file.
     pub bounds: Option<Aabb>,
@@ -72,6 +75,7 @@ impl Mesh {
             vertices:     Vec::new(),
             primitives:   Vec::new(),
             morph_targets: Vec::new(),
+            morph_weights: Vec::new(),
             bounds:       None,
             extensions:   Extensions::new(),
         }
