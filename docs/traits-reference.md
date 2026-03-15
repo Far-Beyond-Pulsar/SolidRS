@@ -15,16 +15,16 @@ SolidRS defines four core traits in `solid_rs::traits`:
 
 ```rust
 pub trait Loader: Send + Sync + 'static {
-    fn load<R: Read + Seek>(
+    fn load(
         &self,
-        reader: R,
+        reader: &mut dyn ReadSeek,
         options: &LoadOptions,
     ) -> Result<Scene>;
 
     fn format_info(&self) -> &FormatInfo;
 
     // Optional — for magic-byte detection:
-    fn detect<R: Read>(&self, reader: &mut R) -> f32 { 0.0 }
+    fn detect(&self, reader: &mut dyn Read) -> f32 { 0.0 }
 }
 ```
 
@@ -45,10 +45,10 @@ pub trait Loader: Send + Sync + 'static {
 
 ```rust
 pub trait Saver: Send + Sync + 'static {
-    fn save<W: Write>(
+    fn save(
         &self,
         scene: &Scene,
-        writer: W,
+        writer: &mut dyn Write,
         options: &SaveOptions,
     ) -> Result<()>;
 
@@ -89,9 +89,12 @@ All methods default to no-ops so you only implement what you need.
 ### Usage in a Saver
 
 ```rust
-struct ObjWriter<W: Write> { writer: W }
+// The visitor holds a reference to the concrete writer.
+struct ObjWriter<'a> {
+    writer: &'a mut dyn Write,
+}
 
-impl<W: Write> SceneVisitor for ObjWriter<W> {
+impl SceneVisitor for ObjWriter<'_> {
     fn visit_mesh(&mut self, mesh: &Mesh, _index: usize) -> Result<()> {
         for v in &mesh.vertices {
             writeln!(self.writer, "v {} {} {}", v.position.x, v.position.y, v.position.z)
@@ -101,8 +104,10 @@ impl<W: Write> SceneVisitor for ObjWriter<W> {
     }
 }
 
-impl<W: Write> Saver for ObjSaver<W> {
-    fn save<W2: Write>(&self, scene: &Scene, writer: W2, _opts: &SaveOptions) -> Result<()> {
+pub struct ObjSaver;
+
+impl Saver for ObjSaver {
+    fn save(&self, scene: &Scene, writer: &mut dyn Write, _opts: &SaveOptions) -> Result<()> {
         let mut visitor = ObjWriter { writer };
         scene.visit(&mut visitor)
     }
