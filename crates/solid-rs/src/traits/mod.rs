@@ -10,6 +10,6 @@ pub mod saver;
 pub mod visitor;
 
 pub use format::FormatInfo;
-pub use loader::{LoadOptions, Loader};
+pub use loader::{LoadOptions, Loader, ReadSeek};
 pub use saver::{SaveOptions, Saver};
 pub use visitor::SceneVisitor;
