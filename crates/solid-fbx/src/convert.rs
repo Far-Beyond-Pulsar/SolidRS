@@ -22,8 +22,8 @@ use solid_rs::scene::{
     AlphaMode, Animation, AnimationChannel, AnimationTarget, Camera, Image, ImageSource,
     Interpolation, Light, Material, Mesh, NodeId, Skin, TextureRef, Texture,
 };
-use solid_rs::scene::camera::{Projection, PerspectiveCamera};
-use solid_rs::scene::light::{LightBase, DirectionalLight, PointLight, SpotLight};
+use solid_rs::scene::camera::{Projection, PerspectiveCamera, OrthographicCamera};
+use solid_rs::scene::light::{LightBase, AreaLight, DirectionalLight, PointLight, SpotLight};
 use solid_rs::{Result, SolidError};
 use solid_rs::scene::Scene;
 
@@ -643,6 +643,10 @@ impl<'d> Converter<'d> {
         let (colors_data, color_indices, color_mode, color_ref_mode) =
             extract_color_layer(node);
 
+        let tangents  = extract_f64_layer(node, "LayerElementTangent", "Tangents");
+        let tangent_w = extract_f64_layer(node, "LayerElementTangent", "TangentW");
+        let tang_mode = extract_mapping_mode(node, "LayerElementTangent");
+
         let (poly_mat_indices, mat_mapping_all_same) = extract_material_layer(node);
 
         let mut vertices:          Vec<Vertex> = Vec::new();
@@ -692,6 +696,14 @@ impl<'d> Converter<'d> {
                 .with_uv(Vec2::new(u, 1.0 - v)); // flip V for OpenGL
             if let Some(c) = color {
                 vtx.colors[0] = Some(c);
+            }
+            if !tangents.is_empty() {
+                let ts = match tang_mode { MappingMode::ByVertex => vert_idx, _ => flat_idx };
+                let tx = tangents.get(ts * 3    ).copied().unwrap_or(0.0) as f32;
+                let ty = tangents.get(ts * 3 + 1).copied().unwrap_or(0.0) as f32;
+                let tz = tangents.get(ts * 3 + 2).copied().unwrap_or(0.0) as f32;
+                let tw = tangent_w.get(ts).copied().unwrap_or(1.0) as f32;
+                vtx.tangent = Some(Vec4::new(tx, ty, tz, tw));
             }
             orig_vert_indices.push(vert_idx);
             vertices.push(vtx);
@@ -862,10 +874,12 @@ impl<'d> Converter<'d> {
     }
 
     fn extract_camera(&mut self, id: i64, node: &FbxNode) {
-        let name       = fbx_object_name(node);
-        let mut fov_y  = 45.0_f32.to_radians();
-        let mut z_near = 0.01_f32;
+        let name            = fbx_object_name(node);
+        let mut fov_y       = 45.0_f32.to_radians();
+        let mut z_near      = 0.01_f32;
         let mut z_far: Option<f32> = None;
+        let mut projection_type: i64 = 0;
+        let mut ortho_zoom  = 1.0_f32;
 
         if let Some(props) = node.child("Properties70") {
             for p in props.children_named("P") {
@@ -883,20 +897,39 @@ impl<'d> Converter<'d> {
                         let v = prop_f32(p, 4);
                         if v > 0.0 { z_far = Some(v); }
                     }
+                    "CameraProjectionType" => {
+                        projection_type = p.properties.get(4).and_then(FbxProperty::as_i64).unwrap_or(0);
+                    }
+                    "OrthoZoom" => {
+                        ortho_zoom = prop_f32(p, 4).max(0.0001);
+                    }
                     _ => {}
                 }
             }
         }
 
-        let cam = Camera {
-            name,
-            projection: Projection::Perspective(PerspectiveCamera {
-                fov_y,
-                aspect_ratio: None,
-                z_near,
-                z_far,
-            }),
-            extensions: Extensions::new(),
+        let cam = if projection_type == 1 {
+            Camera {
+                name,
+                projection: Projection::Orthographic(OrthographicCamera {
+                    x_mag: ortho_zoom,
+                    y_mag: ortho_zoom,
+                    z_near,
+                    z_far: z_far.unwrap_or(1000.0),
+                }),
+                extensions: Extensions::new(),
+            }
+        } else {
+            Camera {
+                name,
+                projection: Projection::Perspective(PerspectiveCamera {
+                    fov_y,
+                    aspect_ratio: None,
+                    z_near,
+                    z_far,
+                }),
+                extensions: Extensions::new(),
+            }
         };
 
         let idx = self.cams.len();
