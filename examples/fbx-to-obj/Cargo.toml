@@ -1,0 +1,13 @@
+[package]
+name    = "fbx-to-obj"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "fbx-to-obj"
+path = "src/main.rs"
+
+[dependencies]
+solid-rs  = { workspace = true }
+solid-fbx = { path = "../../crates/solid-fbx" }
+solid-obj = { path = "../../crates/solid-obj" }

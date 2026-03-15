@@ -1,5 +1,10 @@
 [workspace]
-members  = ["crates/solid-rs", "crates/solid-fbx", "crates/solid-obj"]
+members  = [
+    "crates/solid-rs",
+    "crates/solid-fbx",
+    "crates/solid-obj",
+    "examples/fbx-to-obj",
+]
 resolver = "2"
 
 [workspace.package]

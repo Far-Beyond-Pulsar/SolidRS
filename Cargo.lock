@@ -24,6 +24,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fbx-to-obj"
+version = "0.1.0"
+dependencies = [
+ "solid-fbx",
+ "solid-obj",
+ "solid-rs",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
