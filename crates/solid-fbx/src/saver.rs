@@ -8,7 +8,8 @@ use std::io::Write;
 use glam::{EulerRot, Vec3};
 
 use solid_rs::prelude::*;
-use solid_rs::scene::Scene;
+use solid_rs::scene::{AlphaMode, Camera, Light, Scene};
+use solid_rs::scene::camera::Projection;
 use solid_rs::{Result, SolidError};
 
 use crate::FBX_FORMAT;
@@ -53,10 +54,13 @@ impl<'w> FbxWriter<'w> {
         let mat_ids:   Vec<i64> = (0..scene.materials.len()).map(|_| next_id(&mut id_counter)).collect();
         let tex_ids:   Vec<i64> = (0..scene.textures.len()).map(|_| next_id(&mut id_counter)).collect();
         let node_ids:  Vec<i64> = (0..scene.nodes.len()).map(|_| next_id(&mut id_counter)).collect();
+        let cam_ids:   Vec<i64> = (0..scene.cameras.len()).map(|_| next_id(&mut id_counter)).collect();
+        let light_ids: Vec<i64> = (0..scene.lights.len()).map(|_| next_id(&mut id_counter)).collect();
 
         // ── Definitions ──────────────────────────────────────────────────────
         let total = scene.meshes.len() + scene.materials.len()
-                  + scene.textures.len() + scene.nodes.len();
+                  + scene.textures.len() + scene.nodes.len()
+                  + scene.cameras.len() + scene.lights.len();
         self.line("Definitions:  {")?;
         self.indent += 1;
         self.line("Version: 100")?;
@@ -73,18 +77,32 @@ impl<'w> FbxWriter<'w> {
             self.write_geometry(mesh_ids[i], mesh)?;
         }
         for (i, node) in scene.nodes.iter().enumerate() {
-            self.write_model(node_ids[i], node)?;
+            let node_type = if node.mesh.is_some() {
+                "Mesh"
+            } else if node.camera.is_some() {
+                "Camera"
+            } else if node.light.is_some() {
+                "Light"
+            } else {
+                "Null"
+            };
+            self.write_model(node_ids[i], node, node_type)?;
         }
         for (i, mat) in scene.materials.iter().enumerate() {
             self.write_material(mat_ids[i], mat)?;
         }
         for (i, tex) in scene.textures.iter().enumerate() {
-            // Resolve image URI from scene.images if available
             let uri = scene.images
                 .get(tex.image_index)
                 .and_then(|img| if let solid_rs::scene::ImageSource::Uri(u) = &img.source { Some(u.as_str()) } else { None })
                 .unwrap_or("");
             self.write_texture(tex_ids[i], &tex.name, uri)?;
+        }
+        for (i, cam) in scene.cameras.iter().enumerate() {
+            self.write_camera_attribute(cam_ids[i], cam)?;
+        }
+        for (i, light) in scene.lights.iter().enumerate() {
+            self.write_light_attribute(light_ids[i], light)?;
         }
 
         self.indent -= 1;
@@ -95,9 +113,6 @@ impl<'w> FbxWriter<'w> {
         self.line("Connections:  {")?;
         self.indent += 1;
 
-        // Node position in the node Vec → its NodeId.0 value; but we mapped
-        // node_ids by Vec index, so we need the Vec index of each node.
-        // Build NodeId.0 → Vec-index map
         let node_id_to_vec: std::collections::HashMap<u32, usize> = scene.nodes
             .iter().enumerate().map(|(i, n)| (n.id.0, i)).collect();
 
@@ -109,12 +124,30 @@ impl<'w> FbxWriter<'w> {
                 self.line(&format!("C: \"OO\",{},{}", mesh_ids[mi], nid))?;
             }
 
-            // Material → Model (via first primitive's material_index)
-            if let Some(mi) = node.mesh
-                .and_then(|mi| scene.meshes[mi].primitives.first())
-                .and_then(|p| p.material_index)
-            {
-                self.line(&format!("C: \"OO\",{},{}", mat_ids[mi], nid))?;
+            // All materials → Model (one connection per unique material)
+            if let Some(mesh_idx) = node.mesh {
+                let mut written: std::collections::HashSet<usize> = Default::default();
+                for prim in &scene.meshes[mesh_idx].primitives {
+                    if let Some(mat_idx) = prim.material_index {
+                        if written.insert(mat_idx) && mat_idx < mat_ids.len() {
+                            self.line(&format!("C: \"OO\",{},{}", mat_ids[mat_idx], nid))?;
+                        }
+                    }
+                }
+            }
+
+            // Camera attribute → Model
+            if let Some(ci) = node.camera {
+                if ci < cam_ids.len() {
+                    self.line(&format!("C: \"OO\",{},{}", cam_ids[ci], nid))?;
+                }
+            }
+
+            // Light attribute → Model
+            if let Some(li) = node.light {
+                if li < light_ids.len() {
+                    self.line(&format!("C: \"OO\",{},{}", light_ids[li], nid))?;
+                }
             }
 
             // Model → parent (or scene root = 0)
@@ -170,7 +203,7 @@ impl<'w> FbxWriter<'w> {
             .collect();
         self.write_f64_array("Vertices", &verts)?;
 
-        // PolygonVertexIndex from primitives
+        // PolygonVertexIndex from all primitives
         let mut pvi: Vec<i32> = Vec::new();
         for prim in &mesh.primitives {
             let idx = &prim.indices;
@@ -213,14 +246,32 @@ impl<'w> FbxWriter<'w> {
             self.line("}")?;
         }
 
+        // Vertex colours
+        let has_colors = mesh.vertices.iter().any(|v| v.colors[0].is_some());
+        if has_colors {
+            let color_data: Vec<f64> = mesh.vertices.iter()
+                .flat_map(|v| {
+                    let c = v.colors[0].unwrap_or(glam::Vec4::ONE);
+                    [c.x as f64, c.y as f64, c.z as f64, c.w as f64]
+                })
+                .collect();
+            self.line("LayerElementColor: 0 {")?;
+            self.indent += 1;
+            self.line("MappingInformationType: \"ByPolygonVertex\"")?;
+            self.line("ReferenceInformationType: \"Direct\"")?;
+            self.write_f64_array("Colors", &color_data)?;
+            self.indent -= 1;
+            self.line("}")?;
+        }
+
         self.indent -= 1;
         self.line("}")?;
         self.blank()
     }
 
-    fn write_model(&mut self, id: i64, node: &solid_rs::scene::Node) -> Result<()> {
+    fn write_model(&mut self, id: i64, node: &solid_rs::scene::Node, node_type: &str) -> Result<()> {
         self.line(&format!(
-            "Model: {id}, \"{}\", \"Null\"  {{", escape(&node.name)
+            "Model: {id}, \"{}\", \"{}\"  {{", escape(&node.name), node_type
         ))?;
         self.indent += 1;
         self.line("Version: 232")?;
@@ -258,14 +309,39 @@ impl<'w> FbxWriter<'w> {
         self.line("ShadingModel: \"phong\"")?;
         self.line("Properties70:  {")?;
         self.indent += 1;
+
         let c = mat.base_color_factor;
         let e = mat.emissive_factor;
+
         self.line(&format!(
             "P: \"DiffuseColor\", \"Color\", \"\", \"A\",{},{},{}", c.x, c.y, c.z
         ))?;
         self.line(&format!(
             "P: \"EmissiveColor\", \"Color\", \"\", \"A\",{},{},{}", e.x, e.y, e.z
         ))?;
+        // Always write EmissiveFactor = 1 since emissive_factor is already baked in
+        self.line("P: \"EmissiveFactor\", \"Number\", \"\", \"A+\",1")?;
+
+        // Shininess from roughness: shininess ≈ 2/r² − 2
+        let shininess = if mat.roughness_factor > 0.0 {
+            (2.0_f64 / (mat.roughness_factor as f64).powi(2) - 2.0).max(0.0)
+        } else {
+            10000.0
+        };
+        self.line(&format!(
+            "P: \"Shininess\", \"Number\", \"\", \"A+\",{shininess}"
+        ))?;
+
+        self.line(&format!(
+            "P: \"ReflectionFactor\", \"Number\", \"\", \"A+\",{}", mat.metallic_factor
+        ))?;
+
+        if mat.alpha_mode == AlphaMode::Blend {
+            self.line(&format!(
+                "P: \"Opacity\", \"Number\", \"\", \"A+\",{}", c.w
+            ))?;
+        }
+
         self.indent -= 1;
         self.line("}")?;
         self.indent -= 1;
@@ -280,6 +356,82 @@ impl<'w> FbxWriter<'w> {
         self.indent += 1;
         self.line(&format!("FileName: \"{uri}\""))?;
         self.line(&format!("RelativeFilename: \"{uri}\""))?;
+        self.indent -= 1;
+        self.line("}")?;
+        self.blank()
+    }
+
+    fn write_camera_attribute(&mut self, id: i64, cam: &Camera) -> Result<()> {
+        self.line(&format!(
+            "NodeAttribute: {id}, \"{}\", \"Camera\"  {{", escape(&cam.name)
+        ))?;
+        self.indent += 1;
+        self.line("Properties70:  {")?;
+        self.indent += 1;
+
+        if let Projection::Perspective(p) = &cam.projection {
+            let fov_deg = p.fov_y.to_degrees();
+            self.line(&format!(
+                "P: \"FieldOfView\", \"FieldOfView\", \"Number\", \"A+\",{fov_deg}"
+            ))?;
+            self.line(&format!(
+                "P: \"NearPlane\", \"double\", \"Number\", \"\",{}", p.z_near
+            ))?;
+            if let Some(far) = p.z_far {
+                self.line(&format!(
+                    "P: \"FarPlane\", \"double\", \"Number\", \"\",{far}"
+                ))?;
+            }
+        }
+
+        self.indent -= 1;
+        self.line("}")?;
+        self.indent -= 1;
+        self.line("}")?;
+        self.blank()
+    }
+
+    fn write_light_attribute(&mut self, id: i64, light: &Light) -> Result<()> {
+        self.line(&format!(
+            "NodeAttribute: {id}, \"{}\", \"Light\"  {{", escape(light.name())
+        ))?;
+        self.indent += 1;
+        self.line("Properties70:  {")?;
+        self.indent += 1;
+
+        let light_type: i32 = match light {
+            Light::Point(_)       => 0,
+            Light::Directional(_) => 1,
+            Light::Spot(_)        => 2,
+            Light::Area(_)        => 0, // no FBX area light; treat as point
+        };
+        self.line(&format!(
+            "P: \"LightType\", \"enum\", \"\", \"\",{light_type}"
+        ))?;
+
+        let c = light.color();
+        self.line(&format!(
+            "P: \"Color\", \"Color\", \"\", \"A\",{},{},{}", c.x, c.y, c.z
+        ))?;
+
+        let intensity_100 = light.intensity() * 100.0;
+        self.line(&format!(
+            "P: \"Intensity\", \"Number\", \"\", \"A+\",{intensity_100}"
+        ))?;
+
+        if let Light::Spot(s) = light {
+            self.line(&format!(
+                "P: \"InnerAngle\", \"Number\", \"\", \"A+\",{}",
+                s.inner_cone_angle.to_degrees()
+            ))?;
+            self.line(&format!(
+                "P: \"OuterAngle\", \"Number\", \"\", \"A+\",{}",
+                s.outer_cone_angle.to_degrees()
+            ))?;
+        }
+
+        self.indent -= 1;
+        self.line("}")?;
         self.indent -= 1;
         self.line("}")?;
         self.blank()
