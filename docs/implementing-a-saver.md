@@ -34,10 +34,10 @@ use std::io::Write;
 pub struct MyFmtSaver;
 
 impl Saver for MyFmtSaver {
-    fn save<W: Write>(
+    fn save(
         &self,
         scene: &Scene,
-        writer: W,
+        writer: &mut dyn Write,
         options: &SaveOptions,
     ) -> Result<()> {
         let mut w = std::io::BufWriter::new(writer);
@@ -57,9 +57,9 @@ impl Saver for MyFmtSaver {
 The simplest approach iterates over scene arrays directly:
 
 ```rust
-fn write_scene<W: Write>(
+fn write_scene(
     scene: &Scene,
-    w: &mut W,
+    w: &mut dyn Write,
     opts: &SaveOptions,
 ) -> Result<()> {
     // Header
@@ -103,12 +103,13 @@ fn write_scene<W: Write>(
 For large or streaming formats, implement [`SceneVisitor`] instead:
 
 ```rust
-struct MyFmtWriter<W: Write> {
-    writer:  W,
+// The visitor borrows the writer for its lifetime.
+struct MyFmtWriter<'a> {
+    writer:  &'a mut dyn Write,
     options: SaveOptions,
 }
 
-impl<W: Write> SceneVisitor for MyFmtWriter<W> {
+impl SceneVisitor for MyFmtWriter<'_> {
     fn visit_mesh(&mut self, mesh: &Mesh, _index: usize) -> Result<()> {
         writeln!(self.writer, "mesh {}", mesh.name)
             .map_err(SolidError::Io)?;
@@ -127,7 +128,7 @@ impl<W: Write> SceneVisitor for MyFmtWriter<W> {
 }
 
 impl Saver for MyFmtSaver {
-    fn save<W: Write>(&self, scene: &Scene, writer: W, opts: &SaveOptions) -> Result<()> {
+    fn save(&self, scene: &Scene, writer: &mut dyn Write, opts: &SaveOptions) -> Result<()> {
         let mut v = MyFmtWriter { writer, options: opts.clone() };
         scene.visit(&mut v)
     }
@@ -144,7 +145,7 @@ Savers can read extension data that loaders attached earlier:
 ```rust
 use solid_myfmt::MyFmtMeshMeta;
 
-fn write_mesh<W: Write>(mesh: &Mesh, w: &mut W) -> Result<()> {
+fn write_mesh(mesh: &Mesh, w: &mut dyn Write) -> Result<()> {
     let id = mesh.extensions
         .get::<MyFmtMeshMeta>()
         .map(|m| m.object_id)
