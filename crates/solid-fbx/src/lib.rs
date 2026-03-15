@@ -9,16 +9,19 @@
 //!
 //! | Feature | Load | Save |
 //! |---------|------|------|
-//! | Binary FBX (v6.1 – v7.7, 32 + 64-bit offsets) | ✅ | — |
+//! | Binary FBX (v6.1 – v7.7, 32 + 64-bit offsets) | ✅ | ✅ |
 //! | ASCII FBX (v7.4) | ✅ | ✅ |
 //! | Geometry (positions, normals, UVs) | ✅ | ✅ |
+//! | Tangents (`LayerElementTangent`) | ✅ | ✅ |
 //! | Vertex colours (`LayerElementColor`) | ✅ | ✅ |
 //! | Per-primitive material assignment (`ByPolygon`) | ✅ | ✅ |
 //! | Node hierarchy + transforms (TRS) | ✅ | ✅ |
 //! | Materials — diffuse, emissive, roughness, metallic, alpha | ✅ | ✅ |
 //! | Textures (diffuse + normal map) | ✅ | ✅ |
 //! | Cameras (perspective — FOV, near/far) | ✅ | ✅ |
+//! | Cameras (orthographic — OrthoZoom, near/far) | ✅ | ✅ |
 //! | Lights (point, directional, spot — colour, intensity, cone) | ✅ | ✅ |
+//! | Lights (area — size) | ✅ | ✅ |
 //! | Skeletal skinning (vertex weights, IBP matrices) | ✅ | ✅ |
 //! | Animation clips (translation, rotation, scale) | ✅ | ✅ |
 //!
