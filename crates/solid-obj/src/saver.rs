@@ -123,6 +123,9 @@ fn write_obj(scene: &Scene, w: &mut dyn Write, options: &SaveOptions) -> Result<
                 last_mat = prim.material_index;
             }
 
+            // Smoothing group: simple heuristic — one group per primitive
+            writeln!(w, "s 1").map_err(SolidError::Io)?;
+
             // Emit triangles as faces
             for tri in prim.indices.chunks(3) {
                 let [a, b, c] = [tri[0] as usize, tri[1] as usize, tri[2] as usize];
@@ -155,6 +158,7 @@ fn write_obj(scene: &Scene, w: &mut dyn Write, options: &SaveOptions) -> Result<
                 };
                 writeln!(w, "{face}").map_err(SolidError::Io)?;
             }
+            writeln!(w, "s off").map_err(SolidError::Io)?;
         }
         writeln!(w).map_err(SolidError::Io)?;
 
@@ -211,13 +215,9 @@ fn write_mtl(scene: &Scene, w: &mut dyn Write) -> Result<()> {
         let ns = (1.0 - mat.roughness_factor).powi(2) * 1000.0;
         writeln!(w, "Ns {:.2}", ns).map_err(SolidError::Io)?;
 
-        // PBR scalars
-        if mat.roughness_factor != 1.0 {
-            writeln!(w, "Pr {:.4}", mat.roughness_factor).map_err(SolidError::Io)?;
-        }
-        if mat.metallic_factor != 0.0 {
-            writeln!(w, "Pm {:.4}", mat.metallic_factor).map_err(SolidError::Io)?;
-        }
+        // PBR scalars (always emit)
+        writeln!(w, "Pr {:.4}", mat.roughness_factor).map_err(SolidError::Io)?;
+        writeln!(w, "Pm {:.4}", mat.metallic_factor).map_err(SolidError::Io)?;
 
         // Texture maps
         if let Some(tr) = &mat.base_color_texture {
@@ -229,6 +229,7 @@ fn write_mtl(scene: &Scene, w: &mut dyn Write) -> Result<()> {
             if let Some(uri) = tex_uri(scene, tr.texture_index) {
                 writeln!(w, "map_Ks {uri}").map_err(SolidError::Io)?;
                 writeln!(w, "map_Pr {uri}").map_err(SolidError::Io)?;
+                writeln!(w, "map_Pm {uri}").map_err(SolidError::Io)?;
             }
         }
         if let Some(tr) = &mat.emissive_texture {

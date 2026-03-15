@@ -17,6 +17,9 @@
 //! | MTL library (`mtllib`) | ✅ | ✅ |
 //! | Diffuse / emissive / alpha | ✅ | ✅ |
 //! | Texture maps (`map_Kd`, `map_bump`, …) | ✅ | ✅ |
+//! | Smoothing groups (`s`) | ✅ | ✅ |
+//! | PBR MTL extensions (`Pr`/`Pm`/`map_Pr`/`map_Pm`/`map_Ke`/`norm`) | ✅ | ✅ |
+//! | Alpha mode (`d` / `AlphaMode`) | ✅ | ✅ |
 //! | N-gon fan triangulation | ✅ | — |
 //! | Negative indices | ✅ | — |
 //! | Skinning / Animations | ❌ | ❌ |

@@ -19,7 +19,7 @@
 | Negative / relative indices | ✅ | — |
 | N-gon fan triangulation | ✅ | — |
 | Per-group vertex deduplication | ✅ | — |
-| Smoothing groups (`s`) | ✅ | — |
+| Smoothing groups (`s`) | ✅ | ✅ |
 | Diffuse / emissive / alpha | ✅ | ✅ |
 | Texture maps (`map_Kd`, `map_bump`, …) | ✅ | ✅ |
 | PBR scalars (`Pr`, `Pm`) | ✅ | ✅ |
