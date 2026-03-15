@@ -201,6 +201,199 @@ cargo run -p fbx-to-obj -- input.fbx output.obj
 
 ---
 
+## Format Feature Details
+
+Legend: ✅ supported · ⚠️ partial · ❌ not supported · — not applicable to this format
+
+---
+
+### FBX — Autodesk Filmbox ([`solid-fbx`](crates/solid-fbx))
+
+Extensions: `.fbx` · MIME: `model/fbx`
+
+| Feature | Load | Save | Notes |
+|---|---|---|---|
+| **Encoding** | | | |
+| Binary FBX | ✅ | — | v6.1–v7.7; auto-detects 32-bit (< 7500) vs 64-bit offsets |
+| ASCII FBX | ✅ | ✅ | v7.4 format |
+| **Geometry** | | | |
+| Positions | ✅ | ✅ | |
+| Normals (`ByPolygonVertex` / `ByVertex`) | ✅ | ✅ | |
+| UV coordinates (channel 0) | ✅ | ✅ | V-axis flipped on load/save |
+| Vertex colours (`LayerElementColor`) | ✅ | ✅ | Direct + IndexToDirect |
+| Tangents | ❌ | ❌ | |
+| N-gon triangulation (`PolygonVertexIndex`) | ✅ | ✅ | Fan method |
+| Per-polygon material (`LayerElementMaterial`) | ✅ | ✅ | `AllSame` + `ByPolygon` |
+| **Scene graph** | | | |
+| Node hierarchy (parent / child) | ✅ | ✅ | Topological sort handles arbitrary depth |
+| Local TRS transforms | ✅ | ✅ | Euler → Quat on load; Quat → Euler XYZ on save |
+| **Materials** | | | |
+| Diffuse colour | ✅ | ✅ | |
+| Emissive colour + factor | ✅ | ✅ | |
+| Roughness (from `Shininess`) | ✅ | ✅ | `sqrt(2/(Ns+2))` conversion |
+| Metallic (from `ReflectionFactor`) | ✅ | ✅ | |
+| Alpha / opacity | ✅ | ✅ | `TransparencyFactor` / `Opacity` |
+| **Textures** | | | |
+| Diffuse texture | ✅ | ✅ | Filename / URI |
+| Normal map | ✅ | ✅ | |
+| Emissive / roughness textures | ❌ | ❌ | |
+| **Lights** | | | |
+| Point light | ✅ | ✅ | Colour, intensity, range |
+| Directional light | ✅ | ✅ | |
+| Spot light | ✅ | ✅ | Inner + outer cone angle |
+| Area light | ❌ | ❌ | |
+| **Cameras** | | | |
+| Perspective camera | ✅ | ✅ | FOV, near/far planes |
+| Orthographic camera | ❌ | ❌ | |
+| **Skinning** | | | |
+| Vertex weights (up to 4 influences) | ✅ | ✅ | Top-4 normalised |
+| Inverse bind-pose matrices | ✅ | ✅ | From `TransformLink` |
+| **Animation** | | | |
+| Translation / rotation / scale keyframes | ✅ | ✅ | Linear interpolation |
+| Euler rotation → quaternion conversion | ✅ | ✅ | XYZ order |
+| Multi-track animation stacks | ✅ | ✅ | One `Animation` per `AnimationStack` |
+| Morph target weights | ❌ | ❌ | |
+
+---
+
+### OBJ — Wavefront ([`solid-obj`](crates/solid-obj))
+
+Extensions: `.obj`, `.mtl` · MIME: `model/obj`
+
+| Feature | Load | Save | Notes |
+|---|---|---|---|
+| **Geometry** | | | |
+| Positions (`v`) | ✅ | ✅ | |
+| Normals (`vn`) | ✅ | ✅ | |
+| UV coordinates (`vt`) | ✅ | ✅ | |
+| Triangles (`f 1 2 3`) | ✅ | ✅ | |
+| Quads & N-gons | ✅ | — | Fan-triangulated on load |
+| Negative (relative) indices | ✅ | — | |
+| **Groups** | | | |
+| Object groups (`o`) | ✅ | ✅ | One mesh per object |
+| Named groups (`g`) | ✅ | ✅ | One primitive per group |
+| Smoothing groups (`s`) | ⚠️ | — | Parsed but not used |
+| **Materials (MTL)** | | | |
+| External `.mtl` file | ✅ | ✅ | Resolved from `LoadOptions::base_dir` |
+| Embedded MTL block | — | ✅ | Written inline in `.obj` |
+| Diffuse colour (`Kd`) | ✅ | ✅ | |
+| Specular colour (`Ks`) | ✅ | ✅ | → `metallic_factor` |
+| Emissive colour (`Ke`) | ✅ | ✅ | |
+| Shininess (`Ns`) | ✅ | ✅ | → `roughness_factor` |
+| Opacity (`d` / `Tr`) | ✅ | ✅ | |
+| Diffuse texture (`map_Kd`) | ✅ | ✅ | |
+| Normal map (`map_Bump` / `bump`) | ✅ | ✅ | |
+| PBR extensions (`map_Pr`, `map_Pm`) | ⚠️ | — | Parsed, not mapped |
+| **Scene graph** | | | |
+| Node hierarchy | — | — | OBJ has no hierarchy |
+| Transforms | — | — | |
+| Cameras / lights / skinning / animation | — | — | |
+
+---
+
+### glTF 2.0 — Khronos ([`solid-gltf`](crates/solid-gltf))
+
+Extensions: `.gltf`, `.glb` · MIME: `model/gltf+json`, `model/gltf-binary`
+
+| Feature | Load | Save | Notes |
+|---|---|---|---|
+| **Encoding** | | | |
+| JSON (`.gltf`) | ✅ | ✅ | |
+| Binary GLB | ✅ | ✅ | `GltfSaver::save_glb()` |
+| External buffer URIs | ✅ | — | Resolved from `base_dir` |
+| Base64 data URIs | ✅ | ✅ | Embedded in JSON |
+| **Geometry** | | | |
+| Positions (`POSITION`) | ✅ | ✅ | |
+| Normals (`NORMAL`) | ✅ | ✅ | |
+| Tangents (`TANGENT`) | ✅ | ✅ | |
+| UV channels (`TEXCOORD_0`–`7`) | ✅ | ✅ | Up to 8 channels |
+| Vertex colours (`COLOR_0`) | ✅ | ✅ | |
+| Accessor types: FLOAT / U8 / U16 / U32 | ✅ | ✅ | Normalised reads |
+| Sparse accessors | ❌ | — | |
+| **Scene graph** | | | |
+| Node hierarchy | ✅ | ✅ | |
+| TRS transforms | ✅ | ✅ | |
+| Matrix transforms | ✅ | — | Decomposed on load |
+| **Materials (PBR metallic-roughness)** | | | |
+| Base colour factor + texture | ✅ | ✅ | |
+| Metallic / roughness factor + texture | ✅ | ✅ | |
+| Normal map (+ scale) | ✅ | ✅ | |
+| Occlusion map (+ strength) | ✅ | ✅ | |
+| Emissive factor + texture | ✅ | ✅ | |
+| Alpha modes (OPAQUE / MASK / BLEND) | ✅ | ✅ | |
+| Double-sided flag | ✅ | ✅ | |
+| **Cameras** | | | |
+| Perspective | ✅ | ✅ | |
+| Orthographic | ✅ | ✅ | |
+| **Skinning** | | | |
+| Joints + weights (`JOINTS_0`, `WEIGHTS_0`) | ✅ | — | Loaded into `SkinWeights` |
+| Inverse bind matrices | ✅ | — | |
+| **Animation** | | | |
+| Translation / rotation / scale samplers | ✅ | — | |
+| LINEAR / STEP / CUBICSPLINE | ✅ | — | |
+| Morph target weights | ❌ | — | |
+| **Lighting** | | | |
+| Cameras attached to nodes | ✅ | ✅ | |
+| `KHR_lights_punctual` extension | ❌ | ❌ | |
+
+---
+
+### STL — Stereolithography ([`solid-stl`](crates/solid-stl))
+
+Extensions: `.stl` · MIME: `model/stl`, `application/sla`
+
+| Feature | Load | Save | Notes |
+|---|---|---|---|
+| **Encoding** | | | |
+| Binary STL | ✅ | ✅ | Default save format |
+| ASCII STL | ✅ | ✅ | `StlSaver::save_ascii()` |
+| Auto-detect binary vs ASCII | ✅ | — | Triangle-count checksum method |
+| **Geometry** | | | |
+| Positions | ✅ | ✅ | |
+| Face normals | ✅ | ✅ | Stored per-triangle; recomputed on save |
+| Vertex deduplication | ✅ | — | `HashMap<[u32;3], u32>` bit-cast dedup |
+| Vertex normals | ⚠️ | — | Face normal assigned to all 3 vertices |
+| UV / vertex colours / tangents | — | — | Not supported by format |
+| **Scene graph** | | | |
+| Scene name (from `solid <name>`) | ✅ | ✅ | ASCII only |
+| Node hierarchy / transforms | — | — | Not supported by format |
+| Materials / textures | — | — | Not supported by format |
+| Cameras / lights / skinning / animation | — | — | Not supported by format |
+
+---
+
+### PLY — Stanford Polygon ([`solid-ply`](crates/solid-ply))
+
+Extensions: `.ply` · MIME: `model/ply`
+
+| Feature | Load | Save | Notes |
+|---|---|---|---|
+| **Encoding** | | | |
+| ASCII PLY | ✅ | ✅ | |
+| Binary little-endian | ✅ | ✅ | `PlySaver::save_binary_le()` |
+| Binary big-endian | ✅ | — | Read-only |
+| **Property types** | | | |
+| `char` / `uchar` (int8 / uint8) | ✅ | ✅ | |
+| `short` / `ushort` (int16 / uint16) | ✅ | — | |
+| `int` / `uint` (int32 / uint32) | ✅ | ✅ | |
+| `float` (float32) | ✅ | ✅ | |
+| `double` (float64) | ✅ | — | |
+| List properties | ✅ | ✅ | `property list uchar uint vertex_indices` |
+| **Geometry** | | | |
+| Positions (`x`, `y`, `z`) | ✅ | ✅ | |
+| Normals (`nx`, `ny`, `nz`) | ✅ | ✅ | Written only if present |
+| UV coordinates (`s`/`u`, `t`/`v`, `texture_u/v`) | ✅ | ✅ | |
+| Vertex colours (`red`, `green`, `blue`, `alpha`) | ✅ | ✅ | `uchar` 0–255 ↔ float 0–1 |
+| Triangles | ✅ | ✅ | |
+| N-gon fan triangulation | ✅ | — | |
+| Point clouds (no faces) | ✅ | — | Loaded as mesh with no primitives |
+| **Scene graph** | | | |
+| Node hierarchy / transforms | — | — | Not supported by format |
+| Materials / textures | — | — | Not supported by format |
+| Cameras / lights / skinning / animation | — | — | Not supported by format |
+
+---
+
 ## Implementing a Format Crate
 
 See the step-by-step guides in [`docs/`](docs/):
