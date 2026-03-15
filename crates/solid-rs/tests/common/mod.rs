@@ -45,11 +45,11 @@ pub static SAVE_ONLY_FMT: FormatInfo = FormatInfo {
 pub struct MockLoader;
 
 impl Loader for MockLoader {
-    fn load<R: Read + Seek>(&self, _r: R, _o: &LoadOptions) -> Result<Scene> {
+    fn load(&self, _r: &mut dyn ReadSeek, _o: &LoadOptions) -> Result<Scene> {
         Ok(make_triangle_scene())
     }
     fn format_info(&self) -> &FormatInfo { &MOCK_FMT }
-    fn detect<R: Read>(&self, r: &mut R) -> f32 {
+    fn detect(&self, r: &mut dyn Read) -> f32 {
         let mut buf = [0u8; 4];
         if r.read_exact(&mut buf).is_ok() && &buf == b"MOCK" { 1.0 } else { 0.0 }
     }
@@ -61,7 +61,7 @@ impl Loader for MockLoader {
 pub struct MockSaver;
 
 impl Saver for MockSaver {
-    fn save<W: Write>(&self, _s: &Scene, _w: W, _o: &SaveOptions) -> Result<()> { Ok(()) }
+    fn save(&self, _s: &Scene, _w: &mut dyn Write, _o: &SaveOptions) -> Result<()> { Ok(()) }
     fn format_info(&self) -> &FormatInfo { &MOCK_FMT }
 }
 
@@ -69,7 +69,7 @@ impl Saver for MockSaver {
 
 pub struct FailLoader;
 impl Loader for FailLoader {
-    fn load<R: Read + Seek>(&self, _r: R, _o: &LoadOptions) -> Result<Scene> {
+    fn load(&self, _r: &mut dyn ReadSeek, _o: &LoadOptions) -> Result<Scene> {
         Err(SolidError::parse("intentional failure"))
     }
     fn format_info(&self) -> &FormatInfo { &ALT_FMT }
@@ -77,7 +77,7 @@ impl Loader for FailLoader {
 
 pub struct FailSaver;
 impl Saver for FailSaver {
-    fn save<W: Write>(&self, _s: &Scene, _w: W, _o: &SaveOptions) -> Result<()> {
+    fn save(&self, _s: &Scene, _w: &mut dyn Write, _o: &SaveOptions) -> Result<()> {
         Err(SolidError::other("intentional failure"))
     }
     fn format_info(&self) -> &FormatInfo { &SAVE_ONLY_FMT }
@@ -98,7 +98,7 @@ pub static XYZ_FMT: FormatInfo = FormatInfo {
 
 pub struct XyzLoader;
 impl Loader for XyzLoader {
-    fn load<R: Read + Seek>(&self, reader: R, _o: &LoadOptions) -> Result<Scene> {
+    fn load(&self, reader: &mut dyn ReadSeek, _o: &LoadOptions) -> Result<Scene> {
         use std::io::BufRead;
         let mut b = SceneBuilder::named("XYZ Scene");
         let mut mesh = Mesh::new("Points");
@@ -128,7 +128,7 @@ impl Loader for XyzLoader {
 
 pub struct XyzSaver;
 impl Saver for XyzSaver {
-    fn save<W: Write>(&self, scene: &Scene, mut w: W, opts: &SaveOptions) -> Result<()> {
+    fn save(&self, scene: &Scene, w: &mut dyn Write, opts: &SaveOptions) -> Result<()> {
         if let Some(c) = &opts.copyright {
             writeln!(w, "# {c}").map_err(SolidError::Io)?;
         }
@@ -283,5 +283,5 @@ pub fn make_full_scene() -> Scene {
 pub fn xyz_round_trip(scene: &Scene) -> Scene {
     let mut buf = Vec::new();
     XyzSaver.save(scene, &mut buf, &SaveOptions::default()).unwrap();
-    XyzLoader.load(Cursor::new(buf), &LoadOptions::default()).unwrap()
+    XyzLoader.load(&mut std::io::Cursor::new(buf), &LoadOptions::default()).unwrap()
 }
