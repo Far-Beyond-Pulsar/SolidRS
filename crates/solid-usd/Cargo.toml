@@ -1,0 +1,20 @@
+[package]
+name         = "solid-usd"
+description  = "OpenUSD / USDA loader and saver for SolidRS"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+repository.workspace = true
+homepage.workspace   = true
+keywords     = ["usd", "usda", "openusd", "3d", "scene"]
+categories   = ["graphics", "rendering", "game-development"]
+
+[dependencies]
+solid-rs  = { workspace = true }
+glam      = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+solid-rs = { workspace = true }
+glam     = { workspace = true }
