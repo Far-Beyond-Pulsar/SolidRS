@@ -1,4 +1,4 @@
-# SolidRS
+# Solid3D
 
 A **generic 3D model loading and saving library** for Rust — designed on the
 same split as `serde` / `serde_json`:
