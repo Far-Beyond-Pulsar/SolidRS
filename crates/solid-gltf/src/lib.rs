@@ -25,6 +25,7 @@
 //! | Base colour + texture | ✅ | ✅ |
 //! | Metallic / roughness + texture | ✅ | ✅ |
 //! | Normal / occlusion / emissive | ✅ | ✅ |
+//! | Explicit specular / IOR + textures | ✅ | ✅ |
 //! | Alpha modes | ✅ | ✅ |
 //! | Double-sided | ✅ | ✅ |
 //! | **Cameras** | | |

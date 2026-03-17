@@ -123,8 +123,22 @@ pub fn gltf_to_scene(
                 if let Some(color) = specular.specular_color_factor {
                     m.specular_color = Vec3::from(color);
                 }
+                if let Some(texture) = &specular.specular_color_texture {
+                    m.specular_color_texture = Some(TextureRef {
+                        texture_index: texture.index,
+                        uv_channel: texture.tex_coord.unwrap_or(0),
+                        transform: None,
+                    });
+                }
                 if let Some(weight) = specular.specular_factor {
                     m.specular_weight = weight;
+                }
+                if let Some(texture) = &specular.specular_texture {
+                    m.specular_weight_texture = Some(TextureRef {
+                        texture_index: texture.index,
+                        uv_channel: texture.tex_coord.unwrap_or(0),
+                        transform: None,
+                    });
                 }
             }
             if let Some(ior) = &ext.khr_materials_ior {
@@ -1086,7 +1100,9 @@ pub fn scene_to_gltf(
 
 fn material_uses_specular_extension(material: &Material) -> bool {
     material.specular_color != Vec3::ONE
+        || material.specular_color_texture.is_some()
         || (material.specular_weight - DEFAULT_GLTF_SPECULAR_WEIGHT).abs() > GLTF_FLOAT_EPSILON
+        || material.specular_weight_texture.is_some()
 }
 
 fn material_uses_ior_extension(material: &Material) -> bool {
@@ -1098,11 +1114,19 @@ fn build_material_extensions(material: &Material) -> Option<GltfMaterialExtensio
         specular_factor: ((material.specular_weight - DEFAULT_GLTF_SPECULAR_WEIGHT).abs()
             > GLTF_FLOAT_EPSILON)
             .then_some(material.specular_weight),
+        specular_texture: material.specular_weight_texture.as_ref().map(|texture| GltfTextureInfo {
+            index: texture.texture_index,
+            tex_coord: (texture.uv_channel > 0).then_some(texture.uv_channel),
+        }),
         specular_color_factor: (material.specular_color != Vec3::ONE).then_some([
             material.specular_color.x,
             material.specular_color.y,
             material.specular_color.z,
         ]),
+        specular_color_texture: material.specular_color_texture.as_ref().map(|texture| GltfTextureInfo {
+            index: texture.texture_index,
+            tex_coord: (texture.uv_channel > 0).then_some(texture.uv_channel),
+        }),
     });
     let ior = material_uses_ior_extension(material)
         .then(|| GltfMaterialsIor { ior: Some(material.ior) });
@@ -1111,6 +1135,82 @@ fn build_material_extensions(material: &Material) -> Option<GltfMaterialExtensio
         khr_materials_specular: specular,
         khr_materials_ior: ior,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solid_rs::scene::scene::Scene;
+
+    #[test]
+    fn gltf_import_preserves_explicit_specular_textures() {
+        let root = GltfRoot {
+            asset: GltfAsset::default(),
+            textures: vec![
+                GltfTexture { source: Some(0), ..Default::default() },
+                GltfTexture { source: Some(1), ..Default::default() },
+            ],
+            images: vec![
+                GltfImage { uri: Some("specular.png".into()), ..Default::default() },
+                GltfImage { uri: Some("specular-color.png".into()), ..Default::default() },
+            ],
+            materials: vec![GltfMaterial {
+                extensions: Some(GltfMaterialExtensions {
+                    khr_materials_specular: Some(GltfMaterialsSpecular {
+                        specular_factor: Some(0.6),
+                        specular_texture: Some(GltfTextureInfo { index: 0, tex_coord: Some(1) }),
+                        specular_color_factor: Some([0.8, 0.7, 0.6]),
+                        specular_color_texture: Some(GltfTextureInfo { index: 1, tex_coord: Some(2) }),
+                    }),
+                    khr_materials_ior: Some(GltfMaterialsIor { ior: Some(1.33) }),
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let scene = gltf_to_scene(&root, &[], None).expect("glTF import should succeed");
+        let material = &scene.materials[0];
+
+        assert_eq!(material.specular_color, Vec3::new(0.8, 0.7, 0.6));
+        assert!((material.specular_weight - 0.6).abs() < 1.0e-6);
+        assert!((material.ior - 1.33).abs() < 1.0e-6);
+        assert_eq!(material.specular_color_texture.as_ref().map(|texture| (texture.texture_index, texture.uv_channel)), Some((1, 2)));
+        assert_eq!(material.specular_weight_texture.as_ref().map(|texture| (texture.texture_index, texture.uv_channel)), Some((0, 1)));
+    }
+
+    #[test]
+    fn gltf_export_writes_explicit_specular_textures() {
+        let mut scene = Scene::default();
+        scene.textures.push(Texture::new("specular_weight", 0));
+        scene.textures.push(Texture::new("specular_color", 1));
+        scene.materials.push(Material {
+            name: "SpecularTextures".into(),
+            specular_color_texture: Some(TextureRef {
+                texture_index: 1,
+                uv_channel: 2,
+                transform: None,
+            }),
+            specular_weight_texture: Some(TextureRef {
+                texture_index: 0,
+                uv_channel: 1,
+                transform: None,
+            }),
+            ..Default::default()
+        });
+
+        let (gltf, _) = scene_to_gltf(&scene).expect("glTF export should succeed");
+        assert!(gltf.extensions_used.iter().any(|name| name == "KHR_materials_specular"));
+
+        let specular = gltf.materials[0]
+            .extensions
+            .as_ref()
+            .and_then(|extensions| extensions.khr_materials_specular.as_ref())
+            .expect("specular extension should be written");
+
+        assert_eq!(specular.specular_color_texture.as_ref().map(|texture| (texture.index, texture.tex_coord)), Some((1, Some(2))));
+        assert_eq!(specular.specular_texture.as_ref().map(|texture| (texture.index, texture.tex_coord)), Some((0, Some(1))));
+    }
 }
 
 fn push_bv(

@@ -90,8 +90,20 @@ pub struct Material {
     /// A value of white preserves the authored Fresnel colour derived from
     /// [`Material::ior`].
     pub specular_color: Vec3,
+    /// Optional explicit specular-colour texture.
+    ///
+    /// The texture's RGB channels modulate [`Material::specular_color`]. glTF
+    /// `KHR_materials_specular` maps `specularColorTexture` here and encodes it
+    /// in sRGB.
+    pub specular_color_texture: Option<TextureRef>,
     /// Scalar multiplier for explicit specular response.
     pub specular_weight: f32,
+    /// Optional explicit specular-strength texture.
+    ///
+    /// Canonical consumers should read the scalar from the texture's alpha
+    /// channel and multiply it by [`Material::specular_weight`]. glTF
+    /// `KHR_materials_specular` maps `specularTexture` here.
+    pub specular_weight_texture: Option<TextureRef>,
     /// Index of refraction for the dielectric interface.
     ///
     /// This stays alongside metallic/roughness so importers do not have to
@@ -137,7 +149,9 @@ impl Default for Material {
             roughness_factor: 1.0,
             metallic_roughness_texture: None,
             specular_color: Vec3::ONE,
+            specular_color_texture: None,
             specular_weight: 1.0,
+            specular_weight_texture: None,
             ior: 1.5,
             normal_texture: None,
             normal_scale: 1.0,

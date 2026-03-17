@@ -110,7 +110,9 @@ pub struct GltfMaterialExtensions {
 #[serde(rename_all = "camelCase", default)]
 pub struct GltfMaterialsSpecular {
     pub specular_factor: Option<f32>,
+    pub specular_texture: Option<GltfTextureInfo>,
     pub specular_color_factor: Option<[f32; 3]>,
+    pub specular_color_texture: Option<GltfTextureInfo>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
