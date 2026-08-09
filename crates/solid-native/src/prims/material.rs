@@ -1,7 +1,7 @@
 //! Material asset: a PBR material whose texture slots reference texture prims
 //! by ID.
 
-use glam::{Vec2, Vec3, Vec4};
+use glam::{Vec3, Vec4};
 
 use solid_rs::scene::{AlphaMode, Material, TextureRef, TextureTransform};
 

@@ -104,7 +104,7 @@ impl MeshAsset {
                 .collect(),
             morph_targets: mesh.morph_targets.clone(),
             morph_weights: mesh.morph_weights.clone(),
-            bounds: mesh.bounds,
+            bounds: mesh.bounds.clone(),
         }
     }
 
@@ -124,7 +124,7 @@ impl MeshAsset {
             .collect();
         mesh.morph_targets = self.morph_targets.clone();
         mesh.morph_weights = self.morph_weights.clone();
-        mesh.bounds = self.bounds;
+        mesh.bounds = self.bounds.clone();
         mesh
     }
 }

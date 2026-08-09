@@ -1,6 +1,7 @@
 //! Parses the ASCII (`.slda`) format into a [`DocNode`] tree.
 
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 
 use solid_rs::SolidError;
 

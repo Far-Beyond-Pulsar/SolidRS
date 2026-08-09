@@ -55,7 +55,7 @@ const TAG_ARRAY: u8 = 13;
 const TAG_MAP: u8 = 14;
 
 /// Writes `node` (a root map) to `w` in `.sldb` format.
-pub(crate) fn write<W: Write>(node: &DocNode, w: &mut W) -> crate::Result<()> {
+pub(crate) fn write<W: Write + ?Sized>(node: &DocNode, w: &mut W) -> crate::Result<()> {
     w.write_all(b"SLDB")?;
     w.write_all(&[1, 0, 0, 0])?;
     write_node(node, w)
@@ -88,7 +88,7 @@ pub(crate) fn read(bytes: &[u8]) -> crate::Result<DocNode> {
     Ok(node)
 }
 
-fn write_node<W: Write>(n: &DocNode, w: &mut W) -> crate::Result<()> {
+fn write_node<W: Write + ?Sized>(n: &DocNode, w: &mut W) -> crate::Result<()> {
     match n {
         DocNode::Null => w.write_all(&[TAG_NULL])?,
         DocNode::Bool(b) => w.write_all(&[if *b { TAG_BOOL_TRUE } else { TAG_BOOL_FALSE }])?,
@@ -177,11 +177,11 @@ fn read_node<R: Read>(r: &mut R) -> crate::Result<DocNode> {
         TAG_BYTES => Ok(DocNode::Bytes(read_bytes_buf(r)?)),
         TAG_VEC2 => {
             let v = read_f32s(r, 2)?;
-            Ok(DocNode::Vec2(v))
+            Ok(DocNode::Vec2([v[0], v[1]]))
         }
         TAG_VEC3 => {
             let v = read_f32s(r, 3)?;
-            Ok(DocNode::Vec3(v))
+            Ok(DocNode::Vec3([v[0], v[1], v[2]]))
         }
         TAG_VEC4 => {
             let v = read_f32s(r, 4)?;
@@ -239,7 +239,7 @@ fn read_node<R: Read>(r: &mut R) -> crate::Result<DocNode> {
     }
 }
 
-fn write_f32s<W: Write>(w: &mut W, v: &[f32]) -> crate::Result<()> {
+fn write_f32s<W: Write + ?Sized>(w: &mut W, v: &[f32]) -> crate::Result<()> {
     for x in v {
         w.write_all(&x.to_le_bytes())?;
     }
@@ -256,7 +256,7 @@ fn read_f32s<R: Read>(r: &mut R, n: usize) -> crate::Result<[f32; 4]> {
     Ok(out)
 }
 
-fn write_bytes<W: Write>(w: &mut W, b: &[u8]) -> crate::Result<()> {
+fn write_bytes<W: Write + ?Sized>(w: &mut W, b: &[u8]) -> crate::Result<()> {
     write_count(w, b.len())?;
     w.write_all(b)?;
     Ok(())
@@ -275,7 +275,7 @@ fn read_string<R: Read>(r: &mut R) -> crate::Result<String> {
 }
 
 /// Writes an unsigned LEB128 varint.
-fn write_count<W: Write>(w: &mut W, n: usize) -> crate::Result<()> {
+fn write_count<W: Write + ?Sized>(w: &mut W, n: usize) -> crate::Result<()> {
     w_var(w, n as u64)
 }
 
@@ -284,7 +284,7 @@ fn read_count<R: Read>(r: &mut R) -> crate::Result<usize> {
     Ok(read_var(r)? as usize)
 }
 
-fn w_var<W: Write>(w: &mut W, mut v: u64) -> crate::Result<()> {
+fn w_var<W: Write + ?Sized>(w: &mut W, mut v: u64) -> crate::Result<()> {
     loop {
         let mut byte = (v & 0x7f) as u8;
         v >>= 7;

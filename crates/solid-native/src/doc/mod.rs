@@ -2,7 +2,7 @@
 
 pub mod prim;
 
-pub use prim::{Prim, PrimData};
+pub use prim::{Prim, PrimData, PrimKind};
 
 use std::collections::HashMap;
 

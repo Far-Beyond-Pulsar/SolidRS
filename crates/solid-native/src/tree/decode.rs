@@ -17,13 +17,14 @@ use solid_rs::value::Value;
 
 use crate::doc::{Prim, PrimData, PrimKind, Props, SolidDocument};
 use crate::prims::{
-    AnimChannelAsset, AnimTargetAsset, AnimationAsset, BoneProperty, LightAsset, MaterialAsset,
-    MeshAsset, PrimitiveAsset, SkeletalMeshAsset, SkeletonAsset, TextureAsset, TextureBinding,
+    AnimChannelAsset, AnimTargetAsset, AnimationAsset, Bone, BoneProperty, CameraAsset, LightAsset,
+    MaterialAsset, MeshAsset, PrimitiveAsset, SkeletalMeshAsset, SkeletonAsset, TextureAsset,
+    TextureBinding,
 };
 use crate::tree::{
-    as_array, as_bool, as_f32, as_f32_array, as_i64, as_mat4, as_map, as_str, as_u32_array,
-    as_vec2, as_vec3, as_vec4, field_bool_or, field_f32, field_f32_or, field_i64, field_i64_or,
-    field_opt_f32, field_opt_str, field_str, map_get, map_get_opt, node_to_value, DocNode,
+    as_array, as_f32_array, as_i64, as_mat4, as_map, as_str, as_u32_array, as_vec2, as_vec3,
+    as_vec4, field_bool_or, field_f32, field_i64, field_i64_or, field_opt_f32, field_opt_str,
+    field_str, map_get, map_get_opt, node_to_value, DocNode,
 };
 
 type Result<T> = std::result::Result<T, SolidError>;
@@ -313,6 +314,7 @@ fn decode_texture(n: &DocNode) -> Result<TextureAsset> {
         image: Image {
             name: field_str(n, "name")?.to_owned(),
             source: decode_image_source(map_get(n, "source")?)?,
+            extensions: solid_rs::extensions::Extensions::new(),
         },
         sampler: decode_sampler(map_get(n, "sampler")?)?,
         width: decode_opt_u32(map_get_opt(n, "width")?)?,
@@ -618,6 +620,7 @@ fn decode_scene_image(n: &DocNode) -> Result<Image> {
     Ok(Image {
         name: field_str(n, "name")?.to_owned(),
         source: decode_image_source(map_get(n, "source")?)?,
+        extensions: solid_rs::extensions::Extensions::new(),
     })
 }
 
@@ -684,6 +687,7 @@ fn decode_scene_animation(n: &DocNode) -> Result<Animation> {
             .iter()
             .map(decode_scene_channel)
             .collect::<Result<Vec<_>>>()?,
+        extensions: solid_rs::extensions::Extensions::new(),
     })
 }
 

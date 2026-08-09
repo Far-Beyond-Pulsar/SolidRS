@@ -15,11 +15,12 @@ use solid_rs::traits::{LoadOptions, Loader, Saver, SaveOptions};
 use solid_rs::value::Value;
 
 fn registry() -> Registry {
-    Registry::new()
-        .register_loader(solid_native::SldaLoader)
+    let mut r = Registry::new();
+    r.register_loader(solid_native::SldaLoader)
         .register_loader(solid_native::SldbLoader)
         .register_saver(SldaSaver)
-        .register_saver(SldbSaver)
+        .register_saver(SldbSaver);
+    r
 }
 
 fn sample_scene() -> solid_rs::scene::Scene {
@@ -121,7 +122,8 @@ fn load_from_by_format_id() {
 
 #[test]
 fn loader_rejects_wrong_extension() {
-    let reg = Registry::new().register_loader(solid_native::SldaLoader);
-    assert!(reg.loader_for_extension("sldb").is_none());
-    assert!(reg.loader_by_id("sldb").is_none());
+    let mut r = Registry::new();
+    r.register_loader(solid_native::SldaLoader);
+    assert!(r.loader_for_extension("sldb").is_none());
+    assert!(r.loader_by_id("sldb").is_none());
 }

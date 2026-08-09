@@ -212,9 +212,8 @@ impl Prim {
         };
 
         match &self.data {
-            PrimData::Mesh(m) | PrimData::SkeletalMesh(m) => {
-                let prims = &m.primitives;
-                for p in prims {
+            PrimData::Mesh(m) => {
+                for p in &m.primitives {
                     if let Some(mat) = &p.material {
                         if !known.contains_key(mat) {
                             return Err(err("primitive", mat));
@@ -223,6 +222,13 @@ impl Prim {
                 }
             }
             PrimData::SkeletalMesh(sm) => {
+                for p in &sm.mesh.primitives {
+                    if let Some(mat) = &p.material {
+                        if !known.contains_key(mat) {
+                            return Err(err("primitive", mat));
+                        }
+                    }
+                }
                 if let Some(skel) = &sm.skeleton {
                     if !known.contains_key(skel) {
                         return Err(err("skeletal mesh", skel));

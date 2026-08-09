@@ -57,8 +57,6 @@ pub use solid_rs::error::Result;
 
 use std::io::{Read, Write};
 
-use doc::SolidDocument;
-
 /// Writes `doc` in the ASCII (`.slda`) encoding.
 pub fn save_ascii<W: Write>(doc: &SolidDocument, writer: &mut W) -> Result<()> {
     let node = tree::encode::document_to_tree(doc)?;

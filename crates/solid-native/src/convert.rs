@@ -114,7 +114,7 @@ fn synthesize_scene(doc: &SolidDocument) -> Result<Scene> {
                 scene.nodes.push(Node {
                     id,
                     name: bone.name.clone(),
-                    transform: bone.local_transform,
+                    transform: bone.local_transform.clone(),
                     children: Vec::new(),
                     parent: None,
                     mesh: None,
@@ -170,7 +170,7 @@ fn synthesize_scene(doc: &SolidDocument) -> Result<Scene> {
             mesh.name = prim.name.clone();
             scene.meshes.push(mesh);
 
-            let (skin_index, _, skeleton_root) = sm
+            let (skin_index, skeleton_root) = sm
                 .skeleton
                 .as_deref()
                 .and_then(|id| skel_info.get(id))
@@ -318,6 +318,7 @@ fn synthesize_scene(doc: &SolidDocument) -> Result<Scene> {
                 scene.animations.push(Animation {
                     name: prim.name.clone(),
                     channels,
+                    extensions: Extensions::new(),
                 });
             }
         }

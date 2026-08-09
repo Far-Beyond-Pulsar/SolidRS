@@ -3,13 +3,14 @@
 use std::io::Write;
 
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 
 use solid_rs::error::Result;
 
 use crate::tree::{DocNode, SCHEMA_VERSION};
 
 /// Writes `node` (a root map) to `w` in `.slda` format.
-pub(crate) fn write<W: Write>(node: &DocNode, w: &mut W) -> Result<()> {
+pub(crate) fn write<W: Write + ?Sized>(node: &DocNode, w: &mut W) -> Result<()> {
     let pairs = match node {
         DocNode::Map(pairs) => pairs,
         _ => return Err(solid_rs::SolidError::parse("document root must be a map")),
@@ -24,7 +25,7 @@ pub(crate) fn write<W: Write>(node: &DocNode, w: &mut W) -> Result<()> {
     Ok(())
 }
 
-fn write_value<W: Write>(w: &mut W, n: &DocNode, depth: usize) -> Result<()> {
+fn write_value<W: Write + ?Sized>(w: &mut W, n: &DocNode, depth: usize) -> Result<()> {
     match n {
         DocNode::Null => write!(w, "null")?,
         DocNode::Bool(b) => write!(w, "{b}")?,
@@ -63,7 +64,7 @@ fn write_value<W: Write>(w: &mut W, n: &DocNode, depth: usize) -> Result<()> {
     Ok(())
 }
 
-fn write_scalar_array<W: Write, I: Iterator<Item = DocNode>>(w: &mut W, items: I) -> Result<()> {
+fn write_scalar_array<W: Write + ?Sized, I: Iterator<Item = DocNode>>(w: &mut W, items: I) -> Result<()> {
     write!(w, "[")?;
     let mut first = true;
     for item in items {
@@ -77,7 +78,7 @@ fn write_scalar_array<W: Write, I: Iterator<Item = DocNode>>(w: &mut W, items: I
     Ok(())
 }
 
-fn write_array<W: Write>(w: &mut W, items: &[DocNode], depth: usize) -> Result<()> {
+fn write_array<W: Write + ?Sized>(w: &mut W, items: &[DocNode], depth: usize) -> Result<()> {
     if items.iter().all(|n| is_scalar(n)) {
         return write_scalar_array(w, items.iter().cloned());
     }
@@ -96,9 +97,9 @@ fn write_array<W: Write>(w: &mut W, items: &[DocNode], depth: usize) -> Result<(
     Ok(())
 }
 
-fn write_map<W: Write>(w: &mut W, pairs: &[(String, DocNode)], depth: usize) -> Result<()> {
+fn write_map<W: Write + ?Sized>(w: &mut W, pairs: &[(String, DocNode)], depth: usize) -> Result<()> {
     if pairs.is_empty() {
-        write!(w, "{ }")?;
+        write!(w, "{{}}")?;
         return Ok(());
     }
     write!(w, "{{\n")?;
@@ -126,14 +127,14 @@ fn is_scalar(n: &DocNode) -> bool {
     )
 }
 
-fn indent<W: Write>(w: &mut W, depth: usize) -> Result<()> {
+fn indent<W: Write + ?Sized>(w: &mut W, depth: usize) -> Result<()> {
     for _ in 0..depth {
         write!(w, "    ")?;
     }
     Ok(())
 }
 
-fn write_string<W: Write>(w: &mut W, s: &str) -> Result<()> {
+fn write_string<W: Write + ?Sized>(w: &mut W, s: &str) -> Result<()> {
     write!(w, "\"")?;
     for c in s.chars() {
         match c {

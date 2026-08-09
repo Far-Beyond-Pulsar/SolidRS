@@ -4,7 +4,7 @@
 
 use glam::{Mat4, Vec2, Vec3, Vec4};
 
-use solid_rs::geometry::{Aabb, SkinWeights, Topology, Vertex};
+use solid_rs::geometry::{Aabb, Topology, Vertex};
 use solid_rs::scene::{
     AlphaMode, Animation, AnimationChannel, AnimationTarget, FilterMode, Image, ImageSource,
     Interpolation, Light, Material, Mesh, MorphTarget, Node, Projection, Sampler, Skin, Texture,
@@ -29,14 +29,14 @@ fn f(v: f32) -> DocNode {
 fn s(v: impl Into<String>) -> DocNode {
     DocNode::String(v.into())
 }
-fn v2(v: Vec2) -> DocNode {
-    DocNode::Vec2(v.to_array())
+fn v2(v: impl Into<Vec2>) -> DocNode {
+    DocNode::Vec2(v.into().to_array())
 }
-fn v3(v: Vec3) -> DocNode {
-    DocNode::Vec3(v.to_array())
+fn v3(v: impl Into<Vec3>) -> DocNode {
+    DocNode::Vec3(v.into().to_array())
 }
-fn v4(v: Vec4) -> DocNode {
-    DocNode::Vec4(v.to_array())
+fn v4(v: impl Into<Vec4>) -> DocNode {
+    DocNode::Vec4(v.into().to_array())
 }
 fn f32a(v: Vec<f32>) -> DocNode {
     DocNode::F32Array(v)
@@ -117,7 +117,7 @@ fn mesh_asset_pairs(m: &MeshAsset) -> Vec<(String, DocNode)> {
         ),
         ("morphs".to_string(), encode_morphs(&m.morph_targets)),
         ("morph_weights".to_string(), f32a(m.morph_weights.clone())),
-        ("bounds".to_string(), encode_bounds(m.bounds)),
+        ("bounds".to_string(), encode_bounds(m.bounds.clone())),
     ]
 }
 
@@ -356,8 +356,8 @@ fn animation_pairs(a: &AnimationAsset) -> Vec<(String, DocNode)> {
         "channels".to_string(),
         DocNode::Array(a.channels.iter().map(encode_anim_channel_asset).collect()),
     )];
-    push_opt(&mut pairs, "skeleton", a.skeleton.as_ref().map(|s| s(s)));
-    push_opt(&mut pairs, "mesh", a.mesh.as_ref().map(|s| s(s)));
+    push_opt(&mut pairs, "skeleton", a.skeleton.as_ref().map(|v| s(v.as_str())));
+    push_opt(&mut pairs, "mesh", a.mesh.as_ref().map(|v| s(v.as_str())));
     push_opt(&mut pairs, "duration", a.duration.map(|d| f(d)));
     pairs
 }
@@ -471,7 +471,7 @@ fn scene_pairs(scene: &solid_rs::scene::Scene) -> Vec<(String, DocNode)> {
         "animations".to_string(),
         DocNode::Array(scene.animations.iter().map(encode_scene_animation).collect()),
     ));
-    DocNode::Map(pairs)
+    pairs
 }
 
 fn encode_metadata(meta: &solid_rs::scene::Metadata) -> DocNode {
@@ -526,7 +526,7 @@ fn encode_scene_mesh(m: &Mesh) -> DocNode {
         ),
         "morphs" => encode_morphs(&m.morph_targets),
         "morph_weights" => f32a(m.morph_weights.clone()),
-        "bounds" => encode_bounds(m.bounds),
+        "bounds" => encode_bounds(m.bounds.clone()),
     ]
 }
 
