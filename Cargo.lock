@@ -343,6 +343,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "solid-native"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "glam",
+ "solid-obj",
+ "solid-rs",
+]
+
+[[package]]
 name = "solid-obj"
 version = "0.1.0"
 dependencies = [

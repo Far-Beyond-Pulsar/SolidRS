@@ -1,0 +1,20 @@
+[package]
+name        = "solid-native"
+description = "Solid Native document format (.slda ASCII / .sldb binary) for SolidRS — a self-describing container for 3D assets: meshes, skeletal meshes, skeletons, materials, textures, animations, cameras and lights, each boundable to the others and carrying arbitrary key-value properties."
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+repository.workspace = true
+homepage.workspace   = true
+readme               = "../../README.md"
+
+[dependencies]
+solid-rs = { workspace = true }
+glam     = { workspace = true }
+base64   = { workspace = true }
+
+[dev-dependencies]
+solid-rs  = { workspace = true }
+glam      = { workspace = true }
+solid-obj = { path = "../solid-obj" }
