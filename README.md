@@ -33,6 +33,7 @@ are pulled in à-la-carte.
 | [`solid-x`](crates/solid-x) | ✅ stable | Legacy DirectX `.x` ASCII load + save |
 | [`solid-unreal`](crates/solid-unreal) | ✅ stable | Unreal Engine `.uasset` / `.umap` loader; cooked `UStaticMesh` (positions, normals, UVs), `UTexture2D` (mip data), `UMaterial` (PBR), `UWorld`/`ULevel` actor graph, BSP brush geometry |
 | [`solid-mdl`](crates/solid-mdl) | ✅ stable | Quake MDL binary load + save; 8-bit indexed textures with Quake palette; 162 precomputed anorms; vertex decompression |
+| [`solid-native`](crates/solid-native) | ✅ stable | Solid Native document format; `.slda` ASCII + `.sldb` binary load/save; self-describing, lossless container: meshes, skeletons, skeletal meshes, materials, textures, animations, cameras, lights |
 | `solid-usd` | 🔜 planned | OpenUSD / USDA / USDC loader + saver |
 
 ---
@@ -52,6 +53,7 @@ solid-ply    = "0.1"   # Stanford PLY
 solid-blend  = "0.1"   # Blender .blend
 solid-x      = "0.1"   # DirectX .x
 solid-mdl    = "0.1"   # Quake MDL
+solid-native = "0.1"   # Solid Native .slda (ASCII) / .sldb (binary)
 solid-unreal = "0.1"   # Unreal Engine .uasset / .umap
 ```
 
@@ -138,7 +140,8 @@ cargo run -p fbx-to-obj -- input.fbx output.obj
        ▼               ▼                   ▼
    solid-fbx       solid-obj          solid-gltf
     solid-stl       solid-ply          solid-blend
-    solid-x         solid-mdl          solid-usd          …
+    solid-x         solid-mdl          solid-usd
+    solid-native                                  …
 ```
 
 ### Scene IR
@@ -210,6 +213,8 @@ Legend: ✅ supported · ⚠️ partial · ❌ not supported · — not applicab
 | Blender `.blend` | ✅ | ✅ | Via headless Blender conversion bridge and temporary GLB |
 | DirectX `.x` (ASCII) | ✅ | ✅ | `xof ....txt ....` flavor |
 | Quake MDL | ✅ | ✅ | 8-bit indexed textures; Quake palette; 162 anorms; frame-by-frame animation |
+| Solid Native ASCII | ✅ | ✅ | `.slda`; self-describing, lossless, git-friendly |
+| Solid Native Binary | ✅ | ✅ | `.sldb`; same schema as ASCII, compact & fast |
 
 ---
 
@@ -470,6 +475,37 @@ Legend: ✅ supported · ⚠️ partial · ❌ not supported · — not applicab
 | Bounding box quantisation | — | ✅ | Scale/translate computed from mesh bounds |
 | Normal quantisation | — | ✅ | Closest anorm via dot-product search |
 | No skin output | — | ✅ | `num_skins = 0` (texture lossy) |
+
+</details>
+
+---
+
+<details>
+<summary><strong>Solid Native — <code>.slda</code> / <code>.sldb</code></strong> · <code>solid-native</code> · extensions <code>.slda</code>, <code>.sldb</code> · MIME <code>text/x-slda</code>, <code>application/x-sldb</code> — self-describing, lossless document container; one shared schema, two encodings</summary>
+
+| Feature | Load | Save | Notes |
+|---|---|---|---|
+| **Encoding** | | | |
+| ASCII (`.slda`) | ✅ | ✅ | `SldaLoader` / `SldaSaver`; magic `SLDA `; human-readable, diff- & git-friendly |
+| Binary (`.sldb`) | ✅ | ✅ | `SldbLoader` / `SldbSaver`; magic `SLDB`; compact, fast read/write |
+| Shared document schema | ✅ | ✅ | One `DocNode` tree serialised by both encoders — identical data either way |
+| **Prims** | | | |
+| `mesh` | ✅ | ✅ | Vertex buffer + indexed primitives + morph targets |
+| `skeleton` | ✅ | ✅ | Bone hierarchy (local transforms) + inverse bind matrices |
+| `skeletal_mesh` | ✅ | ✅ | Mesh skinned to a `skeleton` prim by bone name |
+| `material` | ✅ | ✅ | PBR material, texture slots bound by prim ID |
+| `texture` | ✅ | ✅ | Image (URI or embedded bytes) + sampler state |
+| `animation` | ✅ | ✅ | Keyframe channels bound to a skeleton / mesh prim |
+| `camera` | ✅ | ✅ | Perspective or orthographic projection |
+| `light` | ✅ | ✅ | Directional / point / spot / area |
+| `scene` | ✅ | ✅ | Complete `solid-rs` scene graph |
+| **Properties & references** | | | |
+| Per-document `props` table | ✅ | ✅ | Top-level key/value metadata |
+| Per-prim `props` table | ✅ | ✅ | Bool, Int, Float, String, Vec2/3/4, Bytes, arrays, nested maps |
+| Prim cross-references | ✅ | ✅ | Stable string IDs (material→texture, skeletal_mesh→skeleton, animation→target, …) |
+| **Round-trip** | | | |
+| Full-fidelity document API | ✅ | ✅ | `SolidDocument` ↔ tree; lossless |
+| Registry path via `Scene` | ✅ | ✅ | `load_file` / `save_file` through the standard `Loader` / `Saver` traits |
 
 </details>
 
