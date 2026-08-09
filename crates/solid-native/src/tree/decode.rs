@@ -310,9 +310,9 @@ fn decode_transform_opt(n: Option<&DocNode>) -> Result<Option<TextureTransform>>
 
 fn decode_texture(n: &DocNode) -> Result<TextureAsset> {
     Ok(TextureAsset {
-        name: field_str(n, "name")?.to_owned(),
+        name: field_opt_str(n, "asset_name")?.unwrap_or_default(),
         image: Image {
-            name: field_str(n, "name")?.to_owned(),
+            name: field_opt_str(n, "image_name")?.unwrap_or_default(),
             source: decode_image_source(map_get(n, "source")?)?,
             extensions: solid_rs::extensions::Extensions::new(),
         },
