@@ -202,14 +202,6 @@ pub(crate) fn field_f32(n: &DocNode, key: &str) -> crate::Result<f32> {
     as_f32(map_get(n, key)?)
 }
 
-/// Reads a `f32` field with a default.
-pub(crate) fn field_f32_or(n: &DocNode, key: &str, default: f32) -> crate::Result<f32> {
-    match map_get_opt(n, key)? {
-        None => Ok(default),
-        Some(v) => as_f32(v),
-    }
-}
-
 /// Reads an optional `f32` field.
 pub(crate) fn field_opt_f32(n: &DocNode, key: &str) -> crate::Result<Option<f32>> {
     match map_get_opt(n, key)? {
@@ -237,14 +229,6 @@ pub(crate) fn as_i64(n: &DocNode) -> crate::Result<i64> {
     match n {
         DocNode::Int(i) => Ok(*i),
         _ => Err(solid_rs::SolidError::parse(format!("expected an int, got {}", kind_name(n)))),
-    }
-}
-
-pub(crate) fn as_f64(n: &DocNode) -> crate::Result<f64> {
-    match n {
-        DocNode::Float(f) => Ok(*f),
-        DocNode::Int(i) => Ok(*i as f64),
-        _ => Err(solid_rs::SolidError::parse(format!("expected a number, got {}", kind_name(n)))),
     }
 }
 
@@ -300,17 +284,6 @@ pub(crate) fn as_u32_array(n: &DocNode) -> crate::Result<Vec<u32>> {
             .map(|x| as_i64(x).map(|i| i as u32))
             .collect(),
         _ => Err(solid_rs::SolidError::parse(format!("expected a u32 array, got {}", kind_name(n)))),
-    }
-}
-
-pub(crate) fn as_i32_array(n: &DocNode) -> crate::Result<Vec<i32>> {
-    match n {
-        DocNode::I32Array(v) => Ok(v.clone()),
-        DocNode::Array(items) => items
-            .iter()
-            .map(|x| as_i64(x).map(|i| i as i32))
-            .collect(),
-        _ => Err(solid_rs::SolidError::parse(format!("expected an i32 array, got {}", kind_name(n)))),
     }
 }
 

@@ -1,5 +1,7 @@
 //! Shared helpers for the solid-native integration tests.
 
+#![allow(dead_code)]
+
 use glam::{Mat4, Vec2, Vec3, Vec4};
 use solid_native::prims::{
     AnimChannelAsset, AnimTargetAsset, AnimationAsset, Bone, BoneProperty, CameraAsset,
@@ -7,7 +9,7 @@ use solid_native::prims::{
     TextureAsset, TextureBinding,
 };
 use solid_native::{Prim, PrimData, SolidDocument};
-use solid_rs::geometry::{Aabb, SkinWeights, Topology, Vertex};
+use solid_rs::geometry::{SkinWeights, Vertex};
 use solid_rs::scene::Interpolation;
 use solid_rs::value::Value;
 
@@ -47,7 +49,7 @@ pub fn sample_document() -> SolidDocument {
     mat.double_sided = true;
     doc.push(
         Prim::material("mat-red", "Red Painted", mat)
-            .with_prop("shader".into(), "pbr".into()),
+            .with_prop("shader", Value::String("pbr".into())),
     );
 
     // 3. Mesh prim.

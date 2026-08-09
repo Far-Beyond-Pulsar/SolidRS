@@ -4,7 +4,7 @@
 mod common;
 use common::*;
 
-use solid_native::SolidDocument;
+use solid_rs::value::Value;
 
 #[test]
 fn valid_document_validates() {
@@ -63,7 +63,7 @@ fn material_without_texture_prim_is_valid() {
             "Mat",
             solid_native::prims::MaterialAsset::solid_color(glam::Vec4::ONE),
         )
-        .with_prop("p".into(), 1_i64.into()),
+        .with_prop("p", Value::Int(1)),
     );
     assert!(doc.validate().is_ok());
 

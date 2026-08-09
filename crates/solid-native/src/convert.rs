@@ -53,7 +53,7 @@ fn synthesize_scene(doc: &SolidDocument) -> Result<Scene> {
     scene.metadata.source_format = Some("Solid Native".to_string());
 
     let mut next_id = 0u32;
-    let mut alloc_id = |next_id: &mut u32| {
+    let alloc_id = |next_id: &mut u32| {
         let id = NodeId(*next_id);
         *next_id += 1;
         id
