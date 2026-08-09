@@ -60,12 +60,16 @@ fn push_opt(pairs: &mut Vec<(String, DocNode)>, key: &'static str, v: Option<Doc
 // ── Top level ────────────────────────────────────────────────────────────────
 
 /// Encodes a whole document into the shared tree schema.
-pub(crate) fn document_to_tree(doc: &SolidDocument) -> DocNode {
-    m![
+///
+/// Validates the document first (duplicate prim IDs and dangling
+/// cross-prim references) so invalid documents fail at write time.
+pub(crate) fn document_to_tree(doc: &SolidDocument) -> crate::Result<DocNode> {
+    doc.validate()?;
+    Ok(m![
         "name" => s(&doc.name),
         "props" => props_to_node(&doc.props),
         "prims" => DocNode::Array(doc.prims.iter().map(prim_to_node).collect()),
-    ]
+    ])
 }
 
 fn props_to_node(props: &Props) -> DocNode {

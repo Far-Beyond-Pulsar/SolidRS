@@ -37,7 +37,7 @@ pub struct SldaSaver;
 impl Saver for SldaSaver {
     fn save(&self, scene: &Scene, writer: &mut dyn Write, _options: &SaveOptions) -> Result<()> {
         let doc = convert::scene_to_document(scene);
-        let node = crate::tree::encode::document_to_tree(&doc);
+        let node = crate::tree::encode::document_to_tree(&doc)?;
         crate::ascii::write(&node, writer)
     }
 
@@ -53,7 +53,7 @@ pub struct SldbSaver;
 impl Saver for SldbSaver {
     fn save(&self, scene: &Scene, writer: &mut dyn Write, _options: &SaveOptions) -> Result<()> {
         let doc = convert::scene_to_document(scene);
-        let node = crate::tree::encode::document_to_tree(&doc);
+        let node = crate::tree::encode::document_to_tree(&doc)?;
         crate::binary::write(&node, writer)
     }
 

@@ -61,7 +61,7 @@ use doc::SolidDocument;
 
 /// Writes `doc` in the ASCII (`.slda`) encoding.
 pub fn save_ascii<W: Write>(doc: &SolidDocument, writer: &mut W) -> Result<()> {
-    let node = tree::encode::document_to_tree(doc);
+    let node = tree::encode::document_to_tree(doc)?;
     ascii::write(&node, writer)
 }
 
@@ -75,7 +75,7 @@ pub fn load_ascii<R: Read>(reader: &mut R) -> Result<SolidDocument> {
 
 /// Writes `doc` in the binary (`.sldb`) encoding.
 pub fn save_binary<W: Write>(doc: &SolidDocument, writer: &mut W) -> Result<()> {
-    let node = tree::encode::document_to_tree(doc);
+    let node = tree::encode::document_to_tree(doc)?;
     binary::write(&node, writer)
 }
 
