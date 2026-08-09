@@ -35,11 +35,11 @@ static FMT_SLDB: FormatInfo = FormatInfo {
 pub struct SldaLoader;
 
 impl Loader for SldaLoader {
-    fn load(&self, reader: &mut dyn ReadSeek, _options: &LoadOptions) -> Result<Scene> {
+    fn load(&self, reader: &mut dyn ReadSeek, options: &LoadOptions) -> Result<Scene> {
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf)?;
         let node = crate::ascii::parse(&buf)?;
-        let doc = crate::tree::decode::tree_to_document(&node)?;
+        let doc = crate::tree::decode::tree_to_document_par(&node, options.num_threads)?;
         convert::document_to_scene(&doc)
     }
 
@@ -63,11 +63,11 @@ impl Loader for SldaLoader {
 pub struct SldbLoader;
 
 impl Loader for SldbLoader {
-    fn load(&self, reader: &mut dyn ReadSeek, _options: &LoadOptions) -> Result<Scene> {
+    fn load(&self, reader: &mut dyn ReadSeek, options: &LoadOptions) -> Result<Scene> {
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf)?;
         let node = crate::binary::read(&buf)?;
-        let doc = crate::tree::decode::tree_to_document(&node)?;
+        let doc = crate::tree::decode::tree_to_document_par(&node, options.num_threads)?;
         convert::document_to_scene(&doc)
     }
 

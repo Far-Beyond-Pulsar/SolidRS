@@ -28,6 +28,13 @@ pub struct SaveOptions {
 
     /// Flip the V (vertical) texture coordinate when saving.
     pub flip_uv_v: bool,
+
+    /// Number of worker threads for serialising this scene.
+    ///
+    /// Semantics mirror [`LoadOptions::num_threads`](crate::traits::LoadOptions::num_threads):
+    /// `None` = auto, `Some(1)` = serial, `Some(n)` = `n` workers. Savers that
+    /// do not implement parallel serialisation silently ignore this.
+    pub num_threads: Option<usize>,
 }
 
 /// Implemented by format crates to serialise a [`Scene`] to a byte stream.

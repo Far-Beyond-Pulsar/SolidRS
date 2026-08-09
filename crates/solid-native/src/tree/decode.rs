@@ -7,6 +7,7 @@ use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
 
 use solid_rs::error::SolidError;
 use solid_rs::geometry::{Aabb, SkinWeights, Topology, Transform, Vertex};
+use solid_rs::parallel::Parallelism;
 use solid_rs::scene::{
     AlphaMode, Animation, AnimationChannel, AnimationTarget, Camera, FilterMode, Image,
     ImageSource, Interpolation, Light, LightBase, Material, Mesh, MorphTarget, Node, NodeId,
@@ -35,14 +36,33 @@ fn err<T>(msg: impl Into<String>) -> Result<T> {
 
 // ── Top level ────────────────────────────────────────────────────────────────
 
+/// Decodes a tree into a [`SolidDocument`], running fully serially.
 pub(crate) fn tree_to_document(n: &DocNode) -> Result<SolidDocument> {
+    tree_to_document_with(n, &Parallelism::default())
+}
+
+/// Decodes a tree into a [`SolidDocument`], honouring the requested thread
+/// count. Prim nodes (and the vertices inside meshes) are decoded in parallel
+/// when `num_threads` does not force serial (`Some(1)`).
+///
+/// The resulting document is identical to [`tree_to_document`]: order is
+/// preserved and only the decode work is parallelised.
+pub(crate) fn tree_to_document_par(
+    n: &DocNode,
+    num_threads: Option<usize>,
+) -> Result<SolidDocument> {
+    tree_to_document_with(n, &Parallelism::from_num_threads(num_threads))
+}
+
+fn tree_to_document_with(n: &DocNode, par: &Parallelism) -> Result<SolidDocument> {
+    let prims = par
+        .map(as_array(map_get(n, "prims")?)?, |pn| prim_from_node(pn, par))
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?;
     Ok(SolidDocument {
         name: field_str(n, "name")?.to_owned(),
         props: props_from_node(map_get(n, "props")?)?,
-        prims: as_array(map_get(n, "prims")?)?
-            .iter()
-            .map(prim_from_node)
-            .collect::<Result<Vec<_>>>()?,
+        prims,
     })
 }
 
@@ -56,7 +76,7 @@ fn props_from_node(n: &DocNode) -> Result<Props> {
 
 // ── Prims ────────────────────────────────────────────────────────────────────
 
-fn prim_from_node(n: &DocNode) -> Result<Prim> {
+fn prim_from_node(n: &DocNode, par: &Parallelism) -> Result<Prim> {
     let kind = PrimKind::from_str(field_str(n, "kind")?)
         .ok_or_else(|| SolidError::parse("unknown prim kind"))?;
     let id = field_str(n, "id")?.to_owned();
@@ -64,9 +84,9 @@ fn prim_from_node(n: &DocNode) -> Result<Prim> {
     let props = props_from_node(map_get(n, "props")?)?;
 
     let data = match kind {
-        PrimKind::Mesh => PrimData::Mesh(decode_mesh(n)?),
+        PrimKind::Mesh => PrimData::Mesh(decode_mesh(n, par)?),
         PrimKind::Skeleton => PrimData::Skeleton(decode_skeleton(n)?),
-        PrimKind::SkeletalMesh => PrimData::SkeletalMesh(decode_skeletal_mesh(n)?),
+        PrimKind::SkeletalMesh => PrimData::SkeletalMesh(decode_skeletal_mesh(n, par)?),
         PrimKind::Material => PrimData::Material(decode_material(n)?),
         PrimKind::Texture => PrimData::Texture(decode_texture(n)?),
         PrimKind::Animation => PrimData::Animation(decode_animation(n)?),
@@ -74,7 +94,7 @@ fn prim_from_node(n: &DocNode) -> Result<Prim> {
             projection: decode_projection(map_get(n, "projection")?)?,
         }),
         PrimKind::Light => PrimData::Light(decode_light(n)?),
-        PrimKind::Scene => PrimData::Scene(decode_scene(n)?),
+        PrimKind::Scene => PrimData::Scene(decode_scene(n, par)?),
     };
 
     Ok(Prim {
@@ -87,9 +107,9 @@ fn prim_from_node(n: &DocNode) -> Result<Prim> {
 
 // ── Mesh ─────────────────────────────────────────────────────────────────────
 
-fn decode_mesh(n: &DocNode) -> Result<MeshAsset> {
+fn decode_mesh(n: &DocNode, par: &Parallelism) -> Result<MeshAsset> {
     Ok(MeshAsset {
-        vertices: decode_vertices(map_get(n, "vertices")?)?,
+        vertices: decode_vertices(map_get(n, "vertices")?, par)?,
         primitives: as_array(map_get(n, "primitives")?)?
             .iter()
             .map(decode_primitive_asset)
@@ -113,8 +133,10 @@ fn decode_primitive_asset(n: &DocNode) -> Result<PrimitiveAsset> {
 
 // ── Vertices (shared) ────────────────────────────────────────────────────────
 
-pub(crate) fn decode_vertices(n: &DocNode) -> Result<Vec<Vertex>> {
-    as_array(n)?.iter().map(decode_vertex).collect()
+/// Decodes a vertex array, running the per-vertex work in parallel when `par`
+/// allows it.
+pub(crate) fn decode_vertices(n: &DocNode, par: &Parallelism) -> Result<Vec<Vertex>> {
+    par.map(as_array(n)?, decode_vertex).into_iter().collect()
 }
 
 fn decode_vertex(n: &DocNode) -> Result<Vertex> {
@@ -221,9 +243,9 @@ fn decode_skeleton(n: &DocNode) -> Result<SkeletonAsset> {
     })
 }
 
-fn decode_skeletal_mesh(n: &DocNode) -> Result<SkeletalMeshAsset> {
+fn decode_skeletal_mesh(n: &DocNode, par: &Parallelism) -> Result<SkeletalMeshAsset> {
     Ok(SkeletalMeshAsset {
-        mesh: decode_mesh(n)?,
+        mesh: decode_mesh(n, par)?,
         bones: as_array(map_get(n, "bones")?)?
             .iter()
             .map(as_str)
@@ -448,7 +470,7 @@ fn decode_light(n: &DocNode) -> Result<LightAsset> {
 
 // ── Scene ────────────────────────────────────────────────────────────────────
 
-fn decode_scene(n: &DocNode) -> Result<Scene> {
+fn decode_scene(n: &DocNode, par: &Parallelism) -> Result<Scene> {
     Ok(Scene {
         name: field_str(n, "name")?.to_owned(),
         roots: as_u32_array(map_get(n, "roots")?)?
@@ -459,9 +481,9 @@ fn decode_scene(n: &DocNode) -> Result<Scene> {
             .iter()
             .map(decode_node)
             .collect::<Result<Vec<_>>>()?,
-        meshes: as_array(map_get(n, "meshes")?)?
-            .iter()
-            .map(decode_scene_mesh)
+        meshes: par
+            .map(as_array(map_get(n, "meshes")?)?, |m| decode_scene_mesh(m, par))
+            .into_iter()
             .collect::<Result<Vec<_>>>()?,
         materials: as_array(map_get(n, "materials")?)?
             .iter()
@@ -546,10 +568,10 @@ fn decode_opt_usize(n: Option<&DocNode>) -> Result<Option<usize>> {
     }
 }
 
-fn decode_scene_mesh(n: &DocNode) -> Result<Mesh> {
+fn decode_scene_mesh(n: &DocNode, par: &Parallelism) -> Result<Mesh> {
     Ok(Mesh {
         name: field_str(n, "name")?.to_owned(),
-        vertices: decode_vertices(map_get(n, "vertices")?)?,
+        vertices: decode_vertices(map_get(n, "vertices")?, par)?,
         primitives: as_array(map_get(n, "primitives")?)?
             .iter()
             .map(|p| {

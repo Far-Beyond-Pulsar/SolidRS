@@ -1,5 +1,7 @@
 //! Error types for SolidRS loaders and savers.
 
+use std::path::PathBuf;
+
 use thiserror::Error;
 
 /// The unified error type returned by all SolidRS loaders and savers.
@@ -45,6 +47,18 @@ pub enum SolidError {
         format: String,
         /// Human-readable error description.
         message: String,
+    },
+
+    /// One file in a batch [`load_files`](crate::registry::Registry::load_files)
+    /// / [`save_files`](crate::registry::Registry::save_files) operation failed.
+    /// Carries the offending path.
+    #[error("batch operation failed on '{}': {source}", path.display())]
+    Batch {
+        /// The file that failed.
+        path: PathBuf,
+        /// The underlying error.
+        #[source]
+        source: Box<SolidError>,
     },
 
     /// Any other error that does not fit the above categories.
@@ -93,6 +107,16 @@ impl SolidError {
     #[inline]
     pub fn other(msg: impl Into<String>) -> Self {
         Self::Other(msg.into())
+    }
+
+    /// Creates a [`SolidError::Batch`] annotating `source` with the file path
+    /// that failed.
+    #[inline]
+    pub fn batch(path: impl Into<PathBuf>, source: SolidError) -> Self {
+        Self::Batch {
+            path: path.into(),
+            source: Box::new(source),
+        }
     }
 }
 

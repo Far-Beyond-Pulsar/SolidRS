@@ -45,6 +45,18 @@ pub struct LoadOptions {
     /// Base directory used to resolve relative texture URI paths.
     /// `None` = use the directory of the source file where available.
     pub base_dir: Option<PathBuf>,
+
+    /// Number of worker threads for decoding this file.
+    ///
+    /// * `None`  — auto: parallel when the [`parallel`](crate::parallel) feature
+    ///   is enabled, serial otherwise.
+    /// * `Some(1)` — force fully serial decoding (deterministic, matches the
+    ///   pre-parallel behaviour exactly).
+    /// * `Some(n)` — use `n` worker threads.
+    ///
+    /// Formats that do not implement parallel decoding silently ignore this,
+    /// per the usual `LoadOptions` contract.
+    pub num_threads: Option<usize>,
 }
 
 /// Implemented by format crates to parse a byte stream into a [`Scene`].

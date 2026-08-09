@@ -38,6 +38,11 @@ fn load_options_default_base_dir_none() {
 }
 
 #[test]
+fn load_options_default_num_threads_none() {
+    assert!(LoadOptions::default().num_threads.is_none());
+}
+
+#[test]
 fn load_options_can_be_customised() {
     let opts = LoadOptions {
         generate_normals: true,
@@ -47,6 +52,7 @@ fn load_options_can_be_customised() {
         flip_uv_v: true,
         max_texture_size: Some(1024),
         base_dir: Some("/tmp".into()),
+        num_threads: Some(4),
     };
     assert!(opts.generate_normals);
     assert!(opts.triangulate);
@@ -54,6 +60,7 @@ fn load_options_can_be_customised() {
     assert!(!opts.merge_meshes);
     assert!(opts.flip_uv_v);
     assert_eq!(opts.max_texture_size, Some(1024));
+    assert_eq!(opts.num_threads, Some(4));
     assert_eq!(
         opts.base_dir.as_ref().and_then(|p| p.to_str()),
         Some("/tmp")

@@ -5,6 +5,7 @@
 use glam::{Mat4, Vec2, Vec3, Vec4};
 
 use solid_rs::geometry::{Aabb, Topology, Vertex};
+use solid_rs::parallel::Parallelism;
 use solid_rs::scene::{
     AlphaMode, Animation, AnimationChannel, AnimationTarget, FilterMode, Image, ImageSource,
     Interpolation, Light, Material, Mesh, MorphTarget, Node, Projection, Sampler, Skin, Texture,
@@ -64,11 +65,32 @@ fn push_opt(pairs: &mut Vec<(String, DocNode)>, key: &'static str, v: Option<Doc
 /// Validates the document first (duplicate prim IDs and dangling
 /// cross-prim references) so invalid documents fail at write time.
 pub(crate) fn document_to_tree(doc: &SolidDocument) -> crate::Result<DocNode> {
+    document_to_tree_with(doc, &Parallelism::default())
+}
+
+/// Encodes a whole document into the shared tree schema, honouring the
+/// requested thread count. Prim nodes (and the vertices inside meshes) are
+/// encoded in parallel when `num_threads` does not force serial (`Some(1)`).
+///
+/// The resulting tree is identical to [`document_to_tree`]: order is preserved
+/// and only the encode work is parallelised.
+pub(crate) fn document_to_tree_par(
+    doc: &SolidDocument,
+    num_threads: Option<usize>,
+) -> crate::Result<DocNode> {
+    document_to_tree_with(doc, &Parallelism::from_num_threads(num_threads))
+}
+
+fn document_to_tree_with(doc: &SolidDocument, par: &Parallelism) -> crate::Result<DocNode> {
     doc.validate()?;
+    let prims = par
+        .map(&doc.prims, |p| prim_to_node(p, par))
+        .into_iter()
+        .collect();
     Ok(m![
         "name" => s(&doc.name),
         "props" => props_to_node(&doc.props),
-        "prims" => DocNode::Array(doc.prims.iter().map(prim_to_node).collect()),
+        "prims" => DocNode::Array(prims),
     ])
 }
 
@@ -83,7 +105,7 @@ fn props_to_node(props: &Props) -> DocNode {
 
 // ── Prims ────────────────────────────────────────────────────────────────────
 
-fn prim_to_node(p: &Prim) -> DocNode {
+fn prim_to_node(p: &Prim, par: &Parallelism) -> DocNode {
     let mut pairs = vec![
         ("kind".to_string(), s(p.kind().as_str())),
         ("id".to_string(), s(&p.id)),
@@ -91,9 +113,9 @@ fn prim_to_node(p: &Prim) -> DocNode {
         ("props".to_string(), props_to_node(&p.props)),
     ];
     match &p.data {
-        PrimData::Mesh(m) => pairs.extend(mesh_asset_pairs(m)),
+        PrimData::Mesh(m) => pairs.extend(mesh_asset_pairs(m, par)),
         PrimData::Skeleton(sk) => pairs.extend(skeleton_pairs(sk)),
-        PrimData::SkeletalMesh(sm) => pairs.extend(skeletal_mesh_pairs(sm)),
+        PrimData::SkeletalMesh(sm) => pairs.extend(skeletal_mesh_pairs(sm, par)),
         PrimData::Material(mat) => pairs.extend(material_asset_pairs(mat)),
         PrimData::Texture(tex) => pairs.extend(texture_pairs(tex)),
         PrimData::Animation(anim) => pairs.extend(animation_pairs(anim)),
@@ -101,16 +123,16 @@ fn prim_to_node(p: &Prim) -> DocNode {
             pairs.push(("projection".to_string(), encode_projection(&cam.projection)))
         }
         PrimData::Light(light) => pairs.extend(light_asset_pairs(light)),
-        PrimData::Scene(scene) => pairs.extend(scene_pairs(scene)),
+        PrimData::Scene(scene) => pairs.extend(scene_pairs(scene, par)),
     }
     DocNode::Map(pairs)
 }
 
 // ── Mesh (asset) ─────────────────────────────────────────────────────────────
 
-fn mesh_asset_pairs(m: &MeshAsset) -> Vec<(String, DocNode)> {
+fn mesh_asset_pairs(m: &MeshAsset, par: &Parallelism) -> Vec<(String, DocNode)> {
     vec![
-        ("vertices".to_string(), encode_vertices(&m.vertices)),
+        ("vertices".to_string(), encode_vertices(&m.vertices, par)),
         (
             "primitives".to_string(),
             DocNode::Array(m.primitives.iter().map(encode_primitive_asset).collect()),
@@ -131,8 +153,10 @@ fn encode_primitive_asset(p: &PrimitiveAsset) -> DocNode {
 
 // ── Vertices (shared) ────────────────────────────────────────────────────────
 
-pub(crate) fn encode_vertices(verts: &[Vertex]) -> DocNode {
-    DocNode::Array(verts.iter().map(encode_vertex).collect())
+/// Encodes a vertex array, running the per-vertex work in parallel when `par`
+/// allows it.
+pub(crate) fn encode_vertices(verts: &[Vertex], par: &Parallelism) -> DocNode {
+    DocNode::Array(par.map(verts, encode_vertex))
 }
 
 fn encode_vertex(v: &Vertex) -> DocNode {
@@ -237,8 +261,8 @@ fn skeleton_pairs(sk: &SkeletonAsset) -> Vec<(String, DocNode)> {
     ]
 }
 
-fn skeletal_mesh_pairs(sm: &SkeletalMeshAsset) -> Vec<(String, DocNode)> {
-    let mut pairs = mesh_asset_pairs(&sm.mesh);
+fn skeletal_mesh_pairs(sm: &SkeletalMeshAsset, par: &Parallelism) -> Vec<(String, DocNode)> {
+    let mut pairs = mesh_asset_pairs(&sm.mesh, par);
     pairs.push((
         "bones".to_string(),
         DocNode::Array(sm.bones.iter().map(|b| s(b)).collect()),
@@ -428,7 +452,7 @@ fn light_type_str(l: &LightAsset) -> &'static str {
 
 // ── Scene ────────────────────────────────────────────────────────────────────
 
-fn scene_pairs(scene: &solid_rs::scene::Scene) -> Vec<(String, DocNode)> {
+fn scene_pairs(scene: &solid_rs::scene::Scene, par: &Parallelism) -> Vec<(String, DocNode)> {
     let mut pairs = vec![
         ("name".to_string(), s(&scene.name)),
         (
@@ -443,7 +467,7 @@ fn scene_pairs(scene: &solid_rs::scene::Scene) -> Vec<(String, DocNode)> {
     ));
     pairs.push((
         "meshes".to_string(),
-        DocNode::Array(scene.meshes.iter().map(encode_scene_mesh).collect()),
+        DocNode::Array(par.map(&scene.meshes, |m| encode_scene_mesh(m, par))),
     ));
     pairs.push((
         "materials".to_string(),
@@ -515,10 +539,10 @@ fn encode_node(n: &Node) -> DocNode {
     ]
 }
 
-fn encode_scene_mesh(m: &Mesh) -> DocNode {
+fn encode_scene_mesh(m: &Mesh, par: &Parallelism) -> DocNode {
     m![
         "name" => s(&m.name),
-        "vertices" => encode_vertices(&m.vertices),
+        "vertices" => encode_vertices(&m.vertices, par),
         "primitives" => DocNode::Array(
             m.primitives.iter().map(|p| m![
                 "topology" => s(topology_str(p.topology)),

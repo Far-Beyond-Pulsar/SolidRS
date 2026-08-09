@@ -35,9 +35,9 @@ static FMT_SLDB: FormatInfo = FormatInfo {
 pub struct SldaSaver;
 
 impl Saver for SldaSaver {
-    fn save(&self, scene: &Scene, writer: &mut dyn Write, _options: &SaveOptions) -> Result<()> {
+    fn save(&self, scene: &Scene, writer: &mut dyn Write, options: &SaveOptions) -> Result<()> {
         let doc = convert::scene_to_document(scene);
-        let node = crate::tree::encode::document_to_tree(&doc)?;
+        let node = crate::tree::encode::document_to_tree_par(&doc, options.num_threads)?;
         crate::ascii::write(&node, writer)
     }
 
@@ -51,9 +51,9 @@ impl Saver for SldaSaver {
 pub struct SldbSaver;
 
 impl Saver for SldbSaver {
-    fn save(&self, scene: &Scene, writer: &mut dyn Write, _options: &SaveOptions) -> Result<()> {
+    fn save(&self, scene: &Scene, writer: &mut dyn Write, options: &SaveOptions) -> Result<()> {
         let doc = convert::scene_to_document(scene);
-        let node = crate::tree::encode::document_to_tree(&doc)?;
+        let node = crate::tree::encode::document_to_tree_par(&doc, options.num_threads)?;
         crate::binary::write(&node, writer)
     }
 

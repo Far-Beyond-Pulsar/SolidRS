@@ -23,6 +23,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::error::{Result, SolidError};
+use crate::parallel::Parallelism;
 use crate::scene::scene::Scene;
 use crate::traits::{FormatInfo, LoadOptions, Loader, ReadSeek, SaveOptions, Saver};
 
@@ -153,6 +154,76 @@ impl Registry {
         saver.save(scene, &mut writer, options)
     }
 
+    // ── Batch file I/O ────────────────────────────────────────────────────────
+
+    /// Loads every file in `paths` into a [`Scene`], preserving input order.
+    ///
+    /// Equivalent to calling [`load_file_with_options`](Self::load_file_with_options)
+    /// once per path. With the [`parallel`](crate::parallel) feature enabled and
+    /// `options.num_threads` not forcing serial (`Some(1)`), files are decoded
+    /// concurrently and the result vector stays in the same order as `paths`.
+    ///
+    /// On failure, the first error is returned wrapped in
+    /// [`SolidError::Batch`] with the offending path.
+    pub fn load_files<P: AsRef<Path> + Send + Sync>(
+        &self,
+        paths: &[P],
+        options: &LoadOptions,
+    ) -> Result<Vec<Scene>> {
+        let plan = Parallelism::from_num_threads(options.num_threads);
+        let results: Vec<Result<Scene>> =
+            plan.map(paths, |p| self.load_file_with_options(p, options));
+        let mut scenes = Vec::with_capacity(results.len());
+        for (path, result) in paths.iter().zip(results) {
+            scenes.push(result.map_err(|e| SolidError::batch(path.as_ref(), e))?);
+        }
+        Ok(scenes)
+    }
+
+    /// Saves each scene to its matching path (zip), with the last file's
+    /// errors reported with their path.
+    ///
+    /// `paths` and `scenes` must have the same length. With the
+    /// [`parallel`](crate::parallel) feature enabled and `options.num_threads`
+    /// not forcing serial (`Some(1)`), saves run concurrently.
+    pub fn save_files<'a, P: AsRef<Path> + Send + Sync>(
+        &self,
+        scenes: &[&'a Scene],
+        paths: &[P],
+        options: &SaveOptions,
+    ) -> Result<()> {
+        if scenes.len() != paths.len() {
+            return Err(SolidError::other(format!(
+                "save_files: {} scenes but {} paths",
+                scenes.len(),
+                paths.len()
+            )));
+        }
+        let plan = Parallelism::from_num_threads(options.num_threads);
+        let pairs: Vec<(&Scene, &P)> = scenes.iter().copied().zip(paths.iter()).collect();
+        let results: Vec<Result<()>> = plan.map(&pairs, |(scene, path)| {
+            self.save_file_with_options(*scene, (*path).as_ref(), options)
+        });
+        for result in results {
+            result?;
+        }
+        Ok(())
+    }
+
+    /// Loads every file in `paths` using configurator [`OptionValues`].
+    ///
+    /// The global [`configurator::keys::THREADS`](crate::configurator::keys::THREADS)
+    /// / [`configurator::keys::PARALLEL`](crate::configurator::keys::PARALLEL)
+    /// values are honoured automatically and drive concurrent batch decoding.
+    #[cfg(feature = "configurator")]
+    pub fn load_files_configured<P: AsRef<Path> + Send + Sync>(
+        &self,
+        paths: &[P],
+        values: &crate::configurator::OptionValues,
+    ) -> Result<Vec<Scene>> {
+        self.load_files(paths, &values.to_load_options())
+    }
+
     /// Loads a scene from an already-open reader using the loader for `format_id`.
     pub fn load_from<R: ReadSeek>(
         &self,
@@ -168,12 +239,17 @@ impl Registry {
 
     /// Returns the import-options schema advertised by the loader for `ext`
     /// (without leading dot), or `None` if no loader handles that extension.
+    ///
+    /// The global parallelism options ([`configurator::keys::THREADS`](crate::configurator::keys::THREADS),
+    /// [`configurator::keys::PARALLEL`](crate::configurator::keys::PARALLEL)) are
+    /// appended automatically, so format crates never need to define them.
     #[cfg(feature = "configurator")]
     pub fn options_schema_for_extension(
         &self,
         ext: &str,
     ) -> Option<crate::configurator::OptionsSchema> {
-        self.loader_for_extension(ext).map(|l| l.options_schema())
+        self.loader_for_extension(ext)
+            .map(|l| l.options_schema().with_global_fields())
     }
 
     /// Loads a scene from `path` using configurator [`OptionValues`], selecting a

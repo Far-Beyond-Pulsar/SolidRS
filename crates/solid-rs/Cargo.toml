@@ -17,6 +17,7 @@ documentation = "https://docs.rs/solid-rs"
 glam      = { workspace = true }
 thiserror = { workspace = true }
 serde     = { workspace = true, optional = true }
+rayon     = { workspace = true, optional = true }
 
 [dev-dependencies]
 glam = { workspace = true }
@@ -29,3 +30,10 @@ serde_json = { workspace = true }
 # import configurator UI from a loader's option schema. Off by default so plain
 # consumers don't pull `serde` or the extra surface; the engine enables it.
 configurator = ["dep:serde"]
+
+# Optional multi-threaded loading/saving: adds rayon-backed parallelism to the
+# registry batch APIs and gives format crates a `parallel` helper they can use
+# to parallelise decode/encode when `LoadOptions::num_threads` /
+# `SaveOptions::num_threads` allow it. Off by default so plain consumers keep a
+# minimal dependency tree; when off, every parallel path degrades to serial.
+parallel = ["dep:rayon"]

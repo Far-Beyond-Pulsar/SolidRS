@@ -28,6 +28,18 @@ pub mod keys {
     pub const MERGE_MESHES: &str = "merge_meshes";
     pub const FLIP_UV_V: &str = "flip_uv_v";
     pub const MAX_TEXTURE_SIZE: &str = "max_texture_size";
+
+    /// **Global** — number of worker threads (0 = auto).
+    ///
+    /// Global keys are merged into every loader's schema by the
+    /// [`Registry`](crate::registry::Registry) (see
+    /// [`OptionsSchema::with_global_fields`]), so format crates never need to
+    /// advertise them themselves.
+    pub const THREADS: &str = "threads";
+
+    /// **Global** — master switch for multi-threaded decoding (`false` forces
+    /// serial regardless of [`THREADS`](Self::THREADS)).
+    pub const PARALLEL: &str = "parallel";
 }
 
 /// A single import-option value.
@@ -257,6 +269,44 @@ impl OptionsSchema {
             ))
     }
 
+    /// The **global** options that apply to every loader regardless of format.
+    ///
+    /// The [`Registry`](crate::registry::Registry) appends these to every
+    /// loader's schema automatically, so format crates never have to define
+    /// them. They control the parallelism settings in [`LoadOptions`].
+    pub fn global_fields() -> Vec<OptionField> {
+        vec![
+            OptionField::int(
+                keys::THREADS,
+                "Worker threads",
+                "Number of worker threads to use when decoding. 0 = auto.",
+                0,
+                Some(0),
+                Some(64),
+                Some(1),
+            ),
+            OptionField::bool(
+                keys::PARALLEL,
+                "Parallel decode",
+                "Enable multi-threaded decoding when the format supports it.",
+                true,
+            ),
+        ]
+    }
+
+    /// Appends the global fields to this schema.
+    ///
+    /// Used by the registry when advertising a loader's options so hosts see
+    /// the parallelism controls without each format crate adding them.
+    pub fn with_global_fields(self) -> Self {
+        self.extend_fields(Self::global_fields())
+    }
+
+    /// Returns `true` if this schema already carries the global fields.
+    pub fn has_global_fields(&self) -> bool {
+        self.fields.iter().any(|f| f.key == keys::THREADS)
+    }
+
     /// Default values for every field, as an [`OptionValues`].
     pub fn default_values(&self) -> OptionValues {
         OptionValues(
@@ -311,6 +361,11 @@ impl OptionValues {
     /// Map the common keys onto a [`LoadOptions`]. Format-specific keys are left
     /// for the loader (or host) to interpret. `base_dir` is not exposed as a
     /// configurator field and is left at its default here.
+    ///
+    /// The global [`keys::THREADS`] / [`keys::PARALLEL`] keys are folded into
+    /// [`LoadOptions::num_threads`](crate::traits::LoadOptions::num_threads):
+    /// `parallel = false` forces `Some(1)`, `threads > 0` requests that many
+    /// workers, otherwise `None` (auto).
     pub fn to_load_options(&self) -> LoadOptions {
         let mut o = LoadOptions::default();
         o.generate_normals = self.bool_or(keys::GENERATE_NORMALS, o.generate_normals);
@@ -320,7 +375,22 @@ impl OptionValues {
         o.flip_uv_v = self.bool_or(keys::FLIP_UV_V, o.flip_uv_v);
         let mts = self.i64_or(keys::MAX_TEXTURE_SIZE, 0);
         o.max_texture_size = if mts > 0 { Some(mts as u32) } else { None };
+        o.num_threads = self.num_threads();
         o
+    }
+
+    /// Reads the global worker-thread setting: `None` (auto) when absent/zero,
+    /// `Some(1)` when parallel is disabled, else `Some(n)`.
+    pub fn num_threads(&self) -> Option<usize> {
+        let parallel = self.bool_or(keys::PARALLEL, true);
+        let threads = self.i64_or(keys::THREADS, 0);
+        if !parallel {
+            Some(1)
+        } else if threads > 0 {
+            Some(threads as usize)
+        } else {
+            None
+        }
     }
 }
 
@@ -377,5 +447,41 @@ mod tests {
         let json = serde_json::to_string(&s).unwrap();
         let back: OptionsSchema = serde_json::from_str(&json).unwrap();
         assert_eq!(s, back);
+    }
+
+    #[test]
+    fn global_fields_are_appended_and_marked() {
+        let base = OptionsSchema::base_load_options();
+        assert!(!base.has_global_fields());
+        let with_globals = base.clone().with_global_fields();
+        assert!(with_globals.has_global_fields());
+        let ks: Vec<&str> = with_globals.fields.iter().map(|f| f.key.as_str()).collect();
+        assert!(ks.contains(&keys::THREADS));
+        assert!(ks.contains(&keys::PARALLEL));
+        // base fields still present
+        assert!(ks.contains(&keys::GENERATE_NORMALS));
+    }
+
+    #[test]
+    fn global_defaults_map_to_auto_threads() {
+        let v = OptionsSchema::base_load_options().with_global_fields().default_values();
+        assert_eq!(v.num_threads(), None);
+    }
+
+    #[test]
+    fn threads_key_maps_onto_num_threads() {
+        let mut v = OptionValues::new();
+        v.set(keys::THREADS, OptionValue::Int(4));
+        assert_eq!(v.num_threads(), Some(4));
+        assert_eq!(v.to_load_options().num_threads, Some(4));
+    }
+
+    #[test]
+    fn parallel_false_forces_serial() {
+        let mut v = OptionValues::new();
+        v.set(keys::PARALLEL, OptionValue::Bool(false));
+        v.set(keys::THREADS, OptionValue::Int(8));
+        assert_eq!(v.num_threads(), Some(1));
+        assert_eq!(v.to_load_options().num_threads, Some(1));
     }
 }

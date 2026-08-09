@@ -72,6 +72,7 @@ pub mod configurator;
 pub mod error;
 pub mod extensions;
 pub mod geometry;
+pub mod parallel;
 pub mod prelude;
 pub mod registry;
 pub mod scene;

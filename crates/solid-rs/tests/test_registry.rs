@@ -3,6 +3,16 @@ use common::*;
 use solid_rs::prelude::*;
 use std::io::Cursor;
 
+fn batch_dir(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "solidrs_batch_{}_{tag}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
 // ── new / default ─────────────────────────────────────────────────────────────
 
 #[test]
@@ -251,4 +261,162 @@ fn registry_routes_xyz_correctly() {
     r.register_loader(MockLoader);
     let l = r.loader_for_extension("xyz").unwrap();
     assert_eq!(l.format_info().id, "xyz");
+}
+
+// ── batch load_files / save_files ─────────────────────────────────────────────
+
+fn write_xyz(path: &std::path::Path, lines: &[&str]) {
+    use std::io::Write;
+    let mut f = std::fs::File::create(path).unwrap();
+    for l in lines {
+        writeln!(f, "{l}").unwrap();
+    }
+}
+
+#[test]
+fn load_files_preserves_order_serially() {
+    let dir = batch_dir("serial");
+    let a = dir.join("a.xyz");
+    let b = dir.join("b.xyz");
+    write_xyz(&a, &["0 0 0", "1 0 0", "0 1 0"]);
+    write_xyz(&b, &["9 9 9"]);
+
+    let mut r = Registry::new();
+    r.register_loader(XyzLoader);
+    let paths = [&a, &b];
+    let opts = LoadOptions { num_threads: Some(1), ..Default::default() };
+    let scenes = r.load_files(&paths, &opts).unwrap();
+    assert_eq!(scenes.len(), 2);
+    assert_eq!(scenes[0].meshes[0].vertex_count(), 3);
+    assert_eq!(scenes[1].meshes[0].vertex_count(), 1);
+}
+
+#[test]
+fn load_files_parallel_matches_serial() {
+    let dir = batch_dir("par");
+    let mut paths = Vec::new();
+    for i in 0..8 {
+        let p = dir.join(format!("m{i}.xyz"));
+        write_xyz(&p, &[&format!("{i} 0 0")]);
+        paths.push(p);
+    }
+
+    let mut r = Registry::new();
+    r.register_loader(XyzLoader);
+
+    let serial = r
+        .load_files(&paths, &LoadOptions { num_threads: Some(1), ..Default::default() })
+        .unwrap();
+    let parallel = r
+        .load_files(&paths, &LoadOptions { num_threads: Some(4), ..Default::default() })
+        .unwrap();
+
+    assert_eq!(serial.len(), parallel.len());
+    for (s, p) in serial.iter().zip(&parallel) {
+        assert_eq!(s.meshes[0].vertices[0].position, p.meshes[0].vertices[0].position);
+    }
+    // Order preserved: first file is m0, last is m7.
+    assert_eq!(parallel[0].meshes[0].vertices[0].position.x, 0.0);
+    assert_eq!(parallel[7].meshes[0].vertices[0].position.x, 7.0);
+}
+
+#[test]
+fn save_files_round_trips_all_paths() {
+    let dir = batch_dir("save");
+    let s1 = make_triangle_scene();
+    let s2 = make_triangle_scene();
+    let p1 = dir.join("one.xyz");
+    let p2 = dir.join("two.xyz");
+
+    let mut r = Registry::new();
+    r.register_saver(XyzSaver);
+    r.register_loader(XyzLoader);
+
+    let scenes = [&s1, &s2];
+    let paths = [&p1, &p2];
+    let opts = SaveOptions { num_threads: Some(4), ..Default::default() };
+    r.save_files(&scenes, &paths, &opts).unwrap();
+    assert!(p1.exists());
+    assert!(p2.exists());
+
+    // Reload both to confirm they round-tripped.
+    let back = r
+        .load_files(&[&p1, &p2], &LoadOptions { num_threads: Some(4), ..Default::default() })
+        .unwrap();
+    assert_eq!(back.len(), 2);
+    for s in &back {
+        assert_eq!(s.meshes[0].vertex_count(), 3);
+    }
+}
+
+#[test]
+fn save_files_mismatched_lengths_errors() {
+    let mut r = Registry::new();
+    r.register_saver(XyzSaver);
+    let s = make_triangle_scene();
+    let e = r
+        .save_files(&[&s], &["one.xyz"], &SaveOptions::default());
+    assert!(e.is_ok()); // 1 vs 1
+    let e2 = r.save_files(&[&s, &s], &["one.xyz"], &SaveOptions::default());
+    assert!(e2.is_err());
+}
+
+#[test]
+fn load_files_reports_failing_path() {
+    let dir = batch_dir("err");
+    let good = dir.join("good.xyz");
+    let bad = dir.join("bad.xyz");
+    write_xyz(&good, &["0 0 0"]);
+    write_xyz(&bad, &["not a number"]);
+
+    let mut r = Registry::new();
+    r.register_loader(XyzLoader);
+    let opts = LoadOptions { num_threads: Some(4), ..Default::default() };
+    let e = r.load_files(&[&good, &bad], &opts).unwrap_err();
+    match e {
+        SolidError::Batch { path, source } => {
+            assert!(path.ends_with("bad.xyz"), "path was {path:?}");
+            assert!(matches!(*source, SolidError::Parse(_)));
+        }
+        other => panic!("expected Batch error, got {other:?}"),
+    }
+}
+
+#[cfg(feature = "configurator")]
+#[test]
+fn load_files_configured_honours_global_threads() {
+    use solid_rs::configurator::{keys, OptionValue, OptionValues};
+
+    let dir = batch_dir("conf");
+    let paths: Vec<_> = (0..4)
+        .map(|i| {
+            let p = dir.join(format!("c{i}.xyz"));
+            write_xyz(&p, &[&format!("{i} 1 1")]);
+            p
+        })
+        .collect();
+
+    let mut r = Registry::new();
+    r.register_loader(XyzLoader);
+
+    let mut values = OptionValues::new();
+    values.set(keys::THREADS, OptionValue::Int(4));
+    let scenes = r.load_files_configured(&paths, &values).unwrap();
+    assert_eq!(scenes.len(), 4);
+    assert_eq!(scenes[0].meshes[0].vertices[0].position.x, 0.0);
+    assert_eq!(scenes[3].meshes[0].vertices[0].position.x, 3.0);
+}
+
+#[cfg(feature = "configurator")]
+#[test]
+fn options_schema_includes_globals() {
+    use solid_rs::configurator::keys;
+
+    let mut r = Registry::new();
+    r.register_loader(XyzLoader);
+    let schema = r.options_schema_for_extension("xyz").unwrap();
+    let ks: Vec<&str> = schema.fields.iter().map(|f| f.key.as_str()).collect();
+    assert!(ks.contains(&keys::THREADS));
+    assert!(ks.contains(&keys::PARALLEL));
+    assert!(ks.contains(&"triangulate"));
 }
