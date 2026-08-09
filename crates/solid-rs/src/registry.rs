@@ -180,8 +180,7 @@ impl Registry {
         Ok(scenes)
     }
 
-    /// Saves each scene to its matching path (zip), with the last file's
-    /// errors reported with their path.
+    /// Saves each scene to its matching path (zip).
     ///
     /// `paths` and `scenes` must have the same length. With the
     /// [`parallel`](crate::parallel) feature enabled and `options.num_threads`
