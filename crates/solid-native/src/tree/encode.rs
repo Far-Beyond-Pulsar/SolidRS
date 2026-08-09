@@ -322,6 +322,8 @@ fn encode_texture_transform(t: &TextureTransform) -> DocNode {
 
 fn texture_pairs(tex: &TextureAsset) -> Vec<(String, DocNode)> {
     let mut pairs = vec![
+        ("asset_name".to_string(), s(&tex.name)),
+        ("image_name".to_string(), s(&tex.image.name)),
         ("source".to_string(), encode_image_source(&tex.image.source)),
         ("sampler".to_string(), encode_sampler(&tex.sampler)),
     ];

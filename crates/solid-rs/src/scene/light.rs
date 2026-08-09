@@ -29,22 +29,27 @@ impl LightBase {
 /// An infinitely-distant, parallel-ray directional light (e.g. a sun).
 #[derive(Debug, Clone)]
 pub struct DirectionalLight {
+    /// Common light properties.
     pub base: LightBase,
+    /// Format-specific extension data.
     pub extensions: Extensions,
 }
 
 /// An omnidirectional point light that emits equally in all directions.
 #[derive(Debug, Clone)]
 pub struct PointLight {
+    /// Common light properties.
     pub base: LightBase,
     /// Maximum range in metres. `None` = infinite (physically based fall-off).
     pub range: Option<f32>,
+    /// Format-specific extension data.
     pub extensions: Extensions,
 }
 
 /// A cone-shaped spot light.
 #[derive(Debug, Clone)]
 pub struct SpotLight {
+    /// Common light properties.
     pub base: LightBase,
     /// Maximum range in metres. `None` = infinite.
     pub range: Option<f32>,
@@ -52,26 +57,33 @@ pub struct SpotLight {
     pub inner_cone_angle: f32,
     /// Half-angle (radians) of the outer falloff cone.
     pub outer_cone_angle: f32,
+    /// Format-specific extension data.
     pub extensions: Extensions,
 }
 
 /// A rectangular area light (not universally supported).
 #[derive(Debug, Clone)]
 pub struct AreaLight {
+    /// Common light properties.
     pub base: LightBase,
     /// Width of the emitting rectangle in metres.
     pub width: f32,
     /// Height of the emitting rectangle in metres.
     pub height: f32,
+    /// Format-specific extension data.
     pub extensions: Extensions,
 }
 
 /// All supported light varieties.
 #[derive(Debug, Clone)]
 pub enum Light {
+    /// Infinitely-distant directional light.
     Directional(DirectionalLight),
+    /// Omnidirectional point light.
     Point(PointLight),
+    /// Cone-shaped spot light.
     Spot(SpotLight),
+    /// Rectangular area light.
     Area(AreaLight),
 }
 

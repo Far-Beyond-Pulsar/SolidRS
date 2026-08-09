@@ -9,7 +9,12 @@ pub enum ImageSource {
     Uri(String),
     /// Raw bytes embedded in the file, together with their MIME type
     /// (e.g. `"image/png"` or `"image/jpeg"`).
-    Embedded { mime_type: String, data: Vec<u8> },
+    Embedded {
+        /// MIME type of the embedded image data (e.g. `"image/png"`).
+        mime_type: String,
+        /// Raw encoded image bytes.
+        data: Vec<u8>,
+    },
 }
 
 /// A 2-D source image.

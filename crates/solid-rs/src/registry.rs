@@ -19,7 +19,6 @@
 //! // println!("meshes: {}", scene.meshes.len());
 //! ```
 
-use std::io::{Read, Seek};
 use std::path::Path;
 use std::sync::Arc;
 

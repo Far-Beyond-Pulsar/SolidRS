@@ -55,7 +55,9 @@ impl Default for OrthographicCamera {
 /// Camera projection type.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Projection {
+    /// Perspective projection (field-of-view based).
     Perspective(PerspectiveCamera),
+    /// Orthographic projection (axis-aligned box).
     Orthographic(OrthographicCamera),
 }
 

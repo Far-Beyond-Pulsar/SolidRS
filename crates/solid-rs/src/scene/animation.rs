@@ -27,7 +27,9 @@ pub enum AnimationTarget {
     Scale(NodeId),
     /// Animates one morph-target weight on the mesh attached to a node.
     MorphWeight {
+        /// The node whose attached mesh carries the morph target.
         node_id: NodeId,
+        /// Index of the morph target within the mesh's `morph_targets`.
         target_index: usize,
     },
 }

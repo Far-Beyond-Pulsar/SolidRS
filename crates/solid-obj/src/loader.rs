@@ -1,6 +1,6 @@
 //! `ObjLoader` — loads Wavefront OBJ files into a `solid_rs::Scene`.
 
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 use std::path::Path;
 
 use solid_rs::prelude::*;
