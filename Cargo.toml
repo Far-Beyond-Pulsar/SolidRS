@@ -11,6 +11,7 @@ members  = [
     "crates/solid-mdl",
     "crates/solid-usd",
     "crates/solid-unreal",
+    "crates/solid-native",
     "crates/solid-roundtrip-tests",
     "examples/fbx-to-obj",
     "examples/unreal-to-fbx",
@@ -27,6 +28,7 @@ homepage      = "https://github.com/Far-Beyond-Pulsar/solid-rs"
 
 [workspace.dependencies]
 solid-rs   = { path = "crates/solid-rs", version = "0.1.0" }
+solid-native = { path = "crates/solid-native", version = "0.1.0" }
 glam       = "0.27"
 thiserror  = "2"
 flate2     = "1"
